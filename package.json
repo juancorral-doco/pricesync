@@ -1,0 +1,8 @@
+{
+  "name": "pricesync",
+  "version": "1.0.0",
+  "description": "Comparador de precios ML vs Tienda Nube",
+  "scripts": {
+    "dev": "netlify dev"
+  }
+}

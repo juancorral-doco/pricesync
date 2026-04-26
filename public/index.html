@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Price Sync — ML × TN</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f5f5f3; --surface:#fff; --surface2:#f0f0ee;
+  --border:rgba(0,0,0,.07); --border2:rgba(0,0,0,.13);
+  --text:#1a1a1a; --muted:#888884;
+  --ml:#b8960a; --tn:#4c44cc;
+  --green:#1a7a3a; --red:#cc2f2f; --amber:#b06d00;
+  --sans:'DM Sans',sans-serif; --mono:'DM Mono',monospace;
+  --radius:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;}
+
+/* Topbar */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;background:var(--surface);border-bottom:1px solid var(--border);}
+.logo{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:13px;font-weight:500;}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--tn);}
+.topbar-right{display:flex;align-items:center;gap:14px;}
+.date-chip{font-family:var(--mono);font-size:11px;color:var(--muted);padding:3px 10px;border:1px solid var(--border2);border-radius:20px;}
+.sync-btn{display:flex;align-items:center;gap:7px;padding:8px 18px;background:#1a1a1a;color:#fff;border:none;border-radius:6px;font-family:var(--sans);font-weight:600;font-size:13px;cursor:pointer;}
+.sync-btn:disabled{opacity:.4;cursor:default;}
+.sync-btn:hover:not(:disabled){opacity:.85;}
+.token-warn{font-size:12px;color:var(--red);font-weight:600;cursor:pointer;display:none;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.spin{animation:spin 1s linear infinite;display:inline-block;}
+
+/* Layout */
+.layout{display:grid;grid-template-columns:210px 1fr;min-height:calc(100vh - 53px);}
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:20px 0;}
+.sidebar-label{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;padding:0 22px;margin-bottom:6px;}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 14px 8px 18px;font-size:13px;color:var(--muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;border-radius:6px;margin:1px 4px;width:calc(100% - 8px);}
+.nav-item:hover{color:var(--text);background:var(--surface2);}
+.nav-item.active{color:var(--text);background:var(--surface2);font-weight:500;}
+.nav-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.stat-card{background:var(--surface2);border-radius:6px;padding:12px 14px;margin:0 10px 6px;}
+.stat-label{font-size:11px;color:var(--muted);margin-bottom:3px;}
+.stat-val{font-family:var(--mono);font-size:20px;font-weight:500;}
+
+/* Main */
+.main{padding:24px 28px;overflow-x:auto;}
+.page{display:none;}
+.page.active{display:block;}
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;}
+.page-title{font-size:19px;font-weight:600;}
+.page-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+
+/* Filtros */
+.filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+.f-select,.f-input{background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:var(--sans);font-size:13px;padding:6px 10px;outline:none;}
+.f-input{flex:1;min-width:150px;}
+
+/* Tabla */
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+table{width:100%;border-collapse:collapse;}
+thead th{text-align:left;padding:9px 13px;font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.05em;border-bottom:1px solid var(--border);font-family:var(--mono);white-space:nowrap;}
+thead th.sort{cursor:pointer;user-select:none;}
+thead th.sort:hover{color:var(--text);}
+thead th.sort span::after{content:' ↕';opacity:.3;font-size:10px;}
+thead th.sort.asc span::after{content:' ↑';opacity:1;}
+thead th.sort.desc span::after{content:' ↓';opacity:1;}
+tbody tr{border-bottom:1px solid var(--border);}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:var(--surface2);}
+tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
+.prod-name{font-weight:500;}
+.prod-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+.price{font-family:var(--mono);font-size:13px;}
+.price-old{font-family:var(--mono);font-size:11px;color:var(--muted);text-decoration:line-through;display:block;}
+.empty{text-align:center;padding:48px;color:var(--muted);}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;}
+.b-ok{background:#e6f4ec;color:var(--green);border:1px solid #b6dfc7;}
+.b-diff{background:#fce8e8;color:var(--red);border:1px solid #f0bcbc;}
+.b-promo{background:#fef3e0;color:var(--amber);border:1px solid #f0d89a;}
+.b-none{background:#efefed;color:var(--muted);border:1px solid var(--border2);}
+.b-nosku{background:#fff0f0;color:var(--red);border:1px solid rgba(204,47,47,.2);}
+
+/* Alerts */
+.alert{padding:11px 14px;border-radius:7px;margin-bottom:14px;font-size:13px;}
+.a-info{background:#eeeeff;border:1px solid #c4c0f0;color:var(--tn);}
+.a-ok{background:#e6f4ec;border:1px solid #b6dfc7;color:var(--green);}
+.a-warn{background:#fef3e0;border:1px solid #f0d89a;color:var(--amber);}
+
+/* Config */
+.cfg-group{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px;}
+.cfg-group h3{font-size:14px;font-weight:600;margin-bottom:14px;}
+.cfg-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;}
+.cfg-label{font-size:13px;color:var(--muted);}
+.cfg-input{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:100px;}
+.toggle{position:relative;width:38px;height:21px;}
+.toggle input{opacity:0;width:0;height:0;}
+.toggle-sl{position:absolute;inset:0;background:var(--surface2);border:1px solid var(--border2);border-radius:21px;cursor:pointer;transition:background .2s;}
+.toggle-sl::before{content:'';position:absolute;width:15px;height:15px;left:2px;top:2px;background:var(--muted);border-radius:50%;transition:transform .2s,background .2s;}
+.toggle input:checked+.toggle-sl{background:#eeeeff;border-color:var(--tn);}
+.toggle input:checked+.toggle-sl::before{transform:translateX(17px);background:var(--tn);}
+.token-box{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:13px;margin-bottom:13px;}
+.token-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;}
+.token-input{flex:1;min-width:180px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:7px 11px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none;}
+.btn{padding:7px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:var(--sans);}
+.btn-primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
+.btn-primary:hover{opacity:.85;}
+.drop-zone{border:2px dashed var(--border2);border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:border-color .2s;background:var(--surface2);}
+.drop-zone:hover{border-color:var(--tn);}
+.export-btn{padding:7px 14px;background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--muted);font-size:13px;cursor:pointer;font-family:var(--sans);}
+.export-btn:hover{border-color:var(--tn);color:var(--text);}
+.sku-ok{color:var(--green);font-weight:500;}
+.sku-err{color:var(--red);}
+.row-nolink{background:rgba(204,47,47,.03);}
+.row-dimmed{opacity:.55;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-dot"></div>
+    PRICE SYNC <span style="font-size:11px;color:var(--muted);margin-left:4px;">ML × TN</span>
+  </div>
+  <div class="topbar-right">
+    <span class="date-chip" id="el-date"></span>
+    <span style="font-size:12px;color:var(--muted);" id="el-sync-time">Sin sincronizar</span>
+    <span class="token-warn" id="el-token-warn" onclick="goConfig()">⚠ Token ML vencido</span>
+    <button class="sync-btn" id="el-sync-btn" onclick="syncAll()">
+      <span id="el-sync-icon">⟳</span> Sincronizar ahora
+    </button>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-label" style="margin-bottom:10px;">NAVEGACIÓN</div>
+    <button class="nav-item active" id="nav-comparison" onclick="goPage('comparison')">
+      <span class="nav-dot" style="background:var(--tn);"></span> Comparación
+    </button>
+    <button class="nav-item" id="nav-ml" onclick="goPage('ml')">
+      <span class="nav-dot" style="background:var(--ml);"></span> MercadoLibre
+    </button>
+    <button class="nav-item" id="nav-tn" onclick="goPage('tn')">
+      <span class="nav-dot" style="background:var(--tn);opacity:.5;"></span> Tienda Nube
+    </button>
+    <button class="nav-item" id="nav-config" onclick="goPage('config')">
+      <span class="nav-dot" style="background:var(--muted);"></span> Configuración
+    </button>
+
+    <div style="margin-top:20px;">
+      <div class="sidebar-label" style="margin-bottom:8px;">RESUMEN HOY</div>
+      <div class="stat-card"><div class="stat-label">Total comparados</div><div class="stat-val" style="color:var(--ml);" id="st-total">—</div></div>
+      <div class="stat-card"><div class="stat-label">Con diferencia</div><div class="stat-val" style="color:var(--red);" id="st-diff">—</div></div>
+      <div class="stat-card"><div class="stat-label">Con promoción</div><div class="stat-val" style="color:var(--amber);" id="st-promo">—</div></div>
+      <div class="stat-card"><div class="stat-label">Sin vincular</div><div class="stat-val" style="color:var(--tn);" id="st-nolink">—</div></div>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- ── COMPARACIÓN ── -->
+    <div class="page active" id="page-comparison">
+      <div class="page-header">
+        <div><div class="page-title">Comparación de precios</div><div class="page-sub">ML (precio efectivo) vs Tienda Nube</div></div>
+        <button class="export-btn" onclick="exportCSV()">↓ Exportar CSV</button>
+      </div>
+      <div class="alert a-info" id="el-comp-alert">Hacé clic en "Sincronizar ahora" para cargar tus publicaciones.</div>
+      <div class="filters">
+        <select class="f-select" id="comp-f-estado" onchange="renderComparison()">
+          <option value="all">Todos los estados</option>
+          <option value="diff">Con diferencia</option>
+          <option value="ok">Sin diferencia</option>
+          <option value="promo">Con promoción</option>
+          <option value="nolink">Sin vincular</option>
+        </select>
+        <select class="f-select" id="comp-f-ml" onchange="renderComparison()">
+          <option value="all">Todas las publicaciones</option>
+          <option value="active">Solo activas</option>
+          <option value="inactive">Solo inactivas</option>
+        </select>
+        <input class="f-input" type="text" id="comp-f-q" placeholder="Buscar producto..." oninput="renderComparison()">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th class="sort" onclick="doSort('comp','title')"><span id="cs-title">PRODUCTO</span></th>
+            <th class="sort" onclick="doSort('comp','priceML')"><span id="cs-priceML">PRECIO ML</span></th>
+            <th class="sort" onclick="doSort('comp','priceTN')"><span id="cs-priceTN">PRECIO TN</span></th>
+            <th class="sort" onclick="doSort('comp','diff')"><span id="cs-diff">DIFERENCIA</span></th>
+            <th>ESTADO</th>
+          </tr></thead>
+          <tbody id="tbody-comp"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── MERCADOLIBRE ── -->
+    <div class="page" id="page-ml">
+      <div class="page-header">
+        <div><div class="page-title">Publicaciones MercadoLibre</div><div class="page-sub">Todas tus publicaciones</div></div>
+      </div>
+      <div class="filters">
+        <select class="f-select" id="ml-f-estado" onchange="renderML()">
+          <option value="all">Todos</option>
+          <option value="active">Activos</option>
+          <option value="inactive">Inactivos</option>
+          <option value="linked">SKU vinculado</option>
+          <option value="nosku">Sin SKU</option>
+          <option value="promo">Con promoción</option>
+        </select>
+        <input class="f-input" type="text" id="ml-f-q" placeholder="Buscar por nombre, SKU o ID..." oninput="renderML()">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th class="sort" onclick="doSort('ml','title')"><span id="ms-title">PRODUCTO</span></th>
+            <th class="sort" onclick="doSort('ml','sku')"><span id="ms-sku">SKU</span></th>
+            <th class="sort" onclick="doSort('ml','price')"><span id="ms-price">PRECIO LISTA</span></th>
+            <th>PROMOCIÓN</th>
+            <th class="sort" onclick="doSort('ml','effPrice')"><span id="ms-effPrice">PRECIO EFECTIVO</span></th>
+            <th class="sort" onclick="doSort('ml','status')"><span id="ms-status">ESTADO</span></th>
+          </tr></thead>
+          <tbody id="tbody-ml"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── TIENDA NUBE ── -->
+    <div class="page" id="page-tn">
+      <div class="page-header">
+        <div><div class="page-title">Productos Tienda Nube</div><div class="page-sub">Importados desde CSV</div></div>
+      </div>
+      <div class="alert a-info" id="el-tn-alert">Importá el CSV desde Configuración → Tienda Nube.</div>
+      <div class="filters">
+        <select class="f-select" id="tn-f-estado" onchange="renderTN()">
+          <option value="all">Todos</option>
+          <option value="visible">Visibles</option>
+          <option value="hidden">Ocultos</option>
+          <option value="linked">SKU vinculado</option>
+          <option value="nosku">Sin SKU</option>
+          <option value="promo">Con promoción</option>
+        </select>
+        <input class="f-input" type="text" id="tn-f-q" placeholder="Buscar por nombre o SKU..." oninput="renderTN()">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th class="sort" onclick="doSort('tn','name')"><span id="ts-name">PRODUCTO</span></th>
+            <th class="sort" onclick="doSort('tn','sku')"><span id="ts-sku">SKU</span></th>
+            <th class="sort" onclick="doSort('tn','price')"><span id="ts-price">PRECIO LISTA</span></th>
+            <th>PROMOCIÓN</th>
+            <th class="sort" onclick="doSort('tn','effPrice')"><span id="ts-effPrice">PRECIO EFECTIVO</span></th>
+            <th class="sort" onclick="doSort('tn','visible')"><span id="ts-visible">ESTADO</span></th>
+          </tr></thead>
+          <tbody id="tbody-tn"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── CONFIGURACIÓN ── -->
+    <div class="page" id="page-config">
+      <div class="page-header"><div><div class="page-title">Configuración</div></div></div>
+
+      <div class="cfg-group">
+        <h3>🟡 MercadoLibre</h3>
+        <div class="alert a-ok" style="font-size:12px;margin-bottom:12px;">✓ Cuenta conectada — User ID: <strong>122478</strong></div>
+        <div class="cfg-row">
+          <span class="cfg-label">Estado del token</span>
+          <span id="el-token-status" style="font-size:13px;"></span>
+        </div>
+        <div class="token-box">
+          <div style="font-size:12px;color:var(--muted);line-height:1.7;">
+            El token vence cada 6 horas. Para renovarlo:<br>
+            1. <a href="https://auth.mercadolibre.com.ar/authorization?response_type=code&client_id=6254347522292621&redirect_uri=https://httpbin.org/get" target="_blank" style="color:var(--tn);">Abrí este link</a> → aceptá → copiá el <code>code=TG-...</code> de la URL<br>
+            2. Ejecutá en PowerShell:<br>
+            <code style="font-size:11px;display:block;margin:6px 0;background:var(--surface);padding:6px 8px;border-radius:4px;border:1px solid var(--border2);">Invoke-RestMethod -Method Post -Uri "https://api.mercadolibre.com/oauth/token" -ContentType "application/x-www-form-urlencoded" -Body "grant_type=authorization_code&client_id=6254347522292621&client_secret=f25xVTPvmIY9rW21lHWRcrU74AMcxhyY&code=TG-TUCODIGO&redirect_uri=https://httpbin.org/get"</code>
+            3. Pegá el <strong>access_token</strong> (APP_USR-...) acá abajo:
+          </div>
+          <div class="token-row">
+            <input type="text" class="token-input" id="el-token-input" placeholder="APP_USR-... o solo la parte después del prefijo">
+            <button class="btn btn-primary" id="el-token-btn" onclick="applyToken()">Guardar token</button>
+          </div>
+          <div id="el-token-result" style="margin-top:8px;font-size:12px;"></div>
+        </div>
+        <div class="cfg-row">
+          <span class="cfg-label">Usar precio de promoción si está activa</span>
+          <label class="toggle"><input type="checkbox" id="cfg-use-promo" checked onchange="saveConfig()"><span class="toggle-sl"></span></label>
+        </div>
+        <div class="cfg-row">
+          <span class="cfg-label">Umbral de diferencia ignorada (%)</span>
+          <input type="number" class="cfg-input" id="cfg-threshold" value="0" min="0" max="50" onchange="saveConfig()">
+        </div>
+      </div>
+
+      <div class="cfg-group">
+        <h3>🟣 Tienda Nube — Importar CSV</h3>
+        <div class="alert a-info" id="el-tn-cfg-alert">Exportá el CSV desde tu panel: Productos → Exportar.</div>
+        <div class="drop-zone" id="el-drop-zone"
+          onclick="document.getElementById('el-csv-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--tn)'"
+          ondragleave="this.style.borderColor=''"
+          ondrop="onDrop(event)">
+          <div style="font-size:26px;margin-bottom:8px;">📄</div>
+          <div style="font-weight:500;" id="el-drop-label">Arrastrá el CSV acá o hacé clic para seleccionar</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">Archivo exportado desde Tienda Nube (separador punto y coma)</div>
+          <input type="file" id="el-csv-input" accept=".csv" style="display:none" onchange="onFileSelect(event)">
+        </div>
+        <div id="el-csv-result" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="cfg-group">
+        <h3>Vinculación de productos</h3>
+        <p style="font-size:13px;color:var(--muted);line-height:1.7;">
+          Los productos se vinculan por <strong style="color:var(--text);">SKU</strong> (prioridad) o por <strong style="color:var(--text);">nombre exacto</strong>.
+          Los que no coinciden aparecen como <span class="badge b-none">Sin vincular</span>.
+        </p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── Configuración ──────────────────────────────────────────────────────────────
+const ML_USER_ID   = '122478';
+const ML_TOKEN_DEF = 'APP_USR-6254347522292621-042608-f3c1cab1e65ae74a0cad6d86553539ca-122478';
+// URL del proxy Netlify — se auto-detecta si estamos en Netlify o en local
+const PROXY_BASE   = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:8888/.netlify/functions/ml-proxy'
+  : '/.netlify/functions/ml-proxy';
+
+// ── API helper — usa proxy en Netlify, directo en archivo local ────────────────
+function isNetlify() {
+  return window.location.protocol === 'https:' && window.location.hostname.includes('netlify');
+}
+
+async function mlFetch(path, params) {
+  params = params || {};
+  if (isNetlify()) {
+    // Usar proxy — el servidor agrega el token
+    var qs = Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
+    var url = PROXY_BASE + '?path=' + encodeURIComponent(path) + (qs ? '&' + qs : '');
+    var r = await fetch(url);
+    return r.json();
+  } else {
+    // Acceso directo — archivo local (desarrollo)
+    var token = getToken();
+    var allParams = Object.assign({ access_token: token }, params);
+    var qs = Object.keys(allParams).map(function(k) { return k + '=' + encodeURIComponent(allParams[k]); }).join('&');
+    var r = await fetch('https://api.mercadolibre.com' + path + '?' + qs);
+    return r.json();
+  }
+}
+
+async function mlFetchRaw(path, params) {
+  params = params || {};
+  if (isNetlify()) {
+    var qs = Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
+    var url = PROXY_BASE + '?path=' + encodeURIComponent(path) + (qs ? '&' + qs : '');
+    return fetch(url);
+  } else {
+    var token = getToken();
+    var allParams = Object.assign({ access_token: token }, params);
+    var qs = Object.keys(allParams).map(function(k) { return k + '=' + encodeURIComponent(allParams[k]); }).join('&');
+    return fetch('https://api.mercadolibre.com' + path + '?' + qs);
+  }
+}
+
+// ── Estado global ──────────────────────────────────────────────────────────────
+let mlItems = [];
+let tnItems = [];
+let links   = {};
+let cfg     = { usePromo: true, threshold: 0 };
+let sortSt  = { comp: { k: null, d: 1 }, ml: { k: null, d: 1 }, tn: { k: null, d: 1 } };
+
+// ── Token ──────────────────────────────────────────────────────────────────────
+function getToken() {
+  try {
+    var s = localStorage.getItem('ml_token') || '';
+    // Token válido: APP_USR-{numeros}-{hex}-{numeros}
+    // Token corrupto: APP_USR-TG-... (código de autorización mezclado con prefijo)
+    if (s.startsWith('APP_USR-') && !s.startsWith('APP_USR-TG-') && s.length > 40) return s;
+    // Limpiar token corrupto
+    if (s) { localStorage.removeItem('ml_token'); localStorage.removeItem('ml_token_exp'); }
+  } catch(e) {}
+  return ML_TOKEN_DEF;
+}
+
+function saveToken(t) {
+  try {
+    localStorage.setItem('ml_token', t);
+    localStorage.setItem('ml_token_exp', String(Date.now() + 21600000));
+  } catch(e) {}
+}
+
+function tokenExpired() {
+  try {
+    const exp = parseInt(localStorage.getItem('ml_token_exp') || '0');
+    return !exp || Date.now() > exp - 300000;
+  } catch(e) { return true; }
+}
+
+function applyToken() {
+  const inp = document.getElementById('el-token-input');
+  const res = document.getElementById('el-token-result');
+  const raw = (inp ? inp.value.trim() : '');
+  if (!raw) { res.innerHTML = '<span style="color:var(--red)">Pegá el token primero.</span>'; return; }
+  const tok = raw.startsWith('APP_USR-') ? raw : 'APP_USR-' + raw;
+  if (tok.length < 40) { res.innerHTML = '<span style="color:var(--red)">Token demasiado corto. Pegá el access_token completo.</span>'; return; }
+  // Detectar token corrupto: TG-... es código de autorización, no access token
+  if (raw.startsWith('TG-') || tok.startsWith('APP_USR-TG-')) {
+    res.innerHTML = '<span style="color:var(--red)">⚠ Ese es el <b>código de autorización</b> (TG-...), no el access_token. ' +
+      'Tenés que ejecutar el comando PowerShell con ese código para obtener el APP_USR-... y pegarlo acá.</span>';
+    return;
+  }
+  saveToken(tok);
+  if (inp) inp.value = '';
+  // Si estamos en Netlify, también actualizar el token en el servidor
+  if (isNetlify()) {
+    fetch(PROXY_BASE + '?action=update-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: tok })
+    }).catch(function() {});
+  }
+  res.innerHTML = '<span style="color:var(--green);font-weight:500;">✓ Token guardado. Hacé clic en Sincronizar ahora.</span>';
+  refreshTokenStatus();
+}
+
+function refreshTokenStatus() {
+  const el = document.getElementById('el-token-status');
+  const warn = document.getElementById('el-token-warn');
+  try {
+    const exp = parseInt(localStorage.getItem('ml_token_exp') || '0');
+    if (!exp) {
+      if (el) el.innerHTML = '<span style="color:var(--amber)">Usando token por defecto</span>';
+      if (warn) warn.style.display = '';
+      return;
+    }
+    const mins = Math.round((exp - Date.now()) / 60000);
+    if (mins <= 0) {
+      if (el) el.innerHTML = '<span style="color:var(--red)">✗ Vencido — renovar</span>';
+      if (warn) warn.style.display = '';
+    } else {
+      const h = Math.floor(mins / 60), m = mins % 60;
+      if (el) el.innerHTML = '<span style="color:var(--green)">✓ Válido por ' + h + 'h ' + m + 'min</span>';
+      if (warn) warn.style.display = 'none';
+    }
+  } catch(e) {}
+}
+
+// ── Navegación ─────────────────────────────────────────────────────────────────
+function goPage(p) {
+  ['comparison','ml','tn','config'].forEach(function(id) {
+    const pg = document.getElementById('page-' + id);
+    const nb = document.getElementById('nav-' + id);
+    if (pg) pg.classList.toggle('active', id === p);
+    if (nb) nb.classList.toggle('active', id === p);
+  });
+}
+
+function goConfig() { goPage('config'); }
+
+// ── CSV Parser ─────────────────────────────────────────────────────────────────
+function parseCSV(text) {
+  var rows = [], col = '', row = [], inQ = false;
+  var CR = 13, LF = 10, QUOT = 34, SEP = 59; // \r \n " ;
+  for (var i = 0; i < text.length; i++) {
+    var c = text.charCodeAt(i), n = i + 1 < text.length ? text.charCodeAt(i + 1) : -1;
+    if (inQ) {
+      if (c === QUOT && n === QUOT) { col += '"'; i++; }
+      else if (c === QUOT) { inQ = false; }
+      else { col += text[i]; }
+    } else {
+      if (c === QUOT) { inQ = true; }
+      else if (c === SEP) { row.push(col); col = ''; }
+      else if (c === CR && n === LF) { row.push(col); rows.push(row); row = []; col = ''; i++; }
+      else if (c === LF || c === CR) { row.push(col); rows.push(row); row = []; col = ''; }
+      else { col += text[i]; }
+    }
+  }
+  if (col !== '' || row.length) { row.push(col); rows.push(row); }
+  return rows;
+}
+
+function parsePrice(s) {
+  var c = String(s || '').replace(/"/g, '').trim().replace(/[^0-9.,]/g, '');
+  if (!c) return 0;
+  if (c.indexOf('.') >= 0 && c.indexOf(',') >= 0) {
+    return c.lastIndexOf('.') > c.lastIndexOf(',')
+      ? parseFloat(c.replace(/,/g, '')) || 0
+      : parseFloat(c.replace(/\./g, '').replace(',', '.')) || 0;
+  }
+  if (c.indexOf(',') >= 0) return parseFloat(c.replace(/\./g, '').replace(',', '.')) || 0;
+  return parseFloat(c) || 0;
+}
+
+function parseTN(text) {
+  var rows = parseCSV(text);
+  if (rows.length < 2) return [];
+  var hdr = rows[0].map(function(h) { return h.trim().toLowerCase(); });
+  function col(name) { return hdr.indexOf(name.toLowerCase()); }
+  var iN = col('nombre'), iP = col('precio'), iPR = col('precio promocional');
+  var iSK = col('sku'), iV = col('mostrar en tienda');
+  if (iN < 0 || iP < 0) return [];
+  var res = [];
+  for (var i = 1; i < rows.length; i++) {
+    var r = rows[i];
+    var nombre = (r[iN] || '').trim();
+    if (!nombre) continue;
+    var precio = parsePrice(r[iP]);
+    var promo  = iPR >= 0 ? parsePrice(r[iPR]) : 0;
+    var sku    = iSK >= 0 ? (r[iSK] || '').trim() : '';
+    var vis    = iV  >= 0 ? (r[iV]  || 'SI').trim().toUpperCase() !== 'NO' : true;
+    res.push({ id: 'tn' + i, name: nombre, sku: sku, price: precio,
+      promoPrice: promo > 0 && promo < precio ? promo : null, visible: vis });
+  }
+  return res;
+}
+
+// ── Drop / File ────────────────────────────────────────────────────────────────
+function onDrop(ev) {
+  ev.preventDefault();
+  var dz = document.getElementById('el-drop-zone');
+  if (dz) dz.style.borderColor = '';
+  var f = ev.dataTransfer && ev.dataTransfer.files[0];
+  if (f) processCSV(f);
+}
+
+function onFileSelect(ev) {
+  var f = ev.target && ev.target.files[0];
+  if (f) processCSV(f);
+}
+
+function processCSV(file) {
+  var res  = document.getElementById('el-csv-result');
+  var alrt = document.getElementById('el-tn-cfg-alert');
+  var lbl  = document.getElementById('el-drop-label');
+  if (res)  res.innerHTML  = '<div style="color:var(--muted);padding:6px 0;">⏳ Procesando ' + file.name + '...</div>';
+  if (alrt) { alrt.className = 'alert a-info'; alrt.textContent = 'Procesando CSV...'; }
+  var reader = new FileReader();
+  reader.onerror = function() {
+    if (res) res.innerHTML = '<div class="alert a-warn">⚠ No se pudo leer el archivo.</div>';
+  };
+  reader.onload = function(ev2) {
+    try {
+      var items = parseTN(ev2.target.result);
+      if (items.length === 0) {
+        if (res)  res.innerHTML = '<div class="alert a-warn">⚠ No se encontraron productos. Verificá que sea el CSV de TN (separador ;).</div>';
+        if (alrt) { alrt.className = 'alert a-warn'; alrt.textContent = '⚠ No se encontraron productos.'; }
+        return;
+      }
+      tnItems = items;
+      try { localStorage.setItem('pricesync_tn', JSON.stringify(tnItems)); } catch(e) {}
+      buildLinks();
+      renderAll();
+      var wP = items.filter(function(p) { return p.promoPrice; }).length;
+      var wS = items.filter(function(p) { return p.sku; }).length;
+      var wL = Object.keys(links).length;
+      var msg = '✓ ' + items.length + ' productos · ' + wS + ' con SKU · ' + wP + ' con promo' +
+        (mlItems.length ? ' · ' + wL + ' vinculados a ML' : '');
+      if (res)  res.innerHTML = '<div class="alert a-ok" style="margin-top:4px;">' + msg + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-top:5px;">' + file.name + ' · ' + new Date().toLocaleString('es-AR') + '</div>';
+      if (alrt) { alrt.className = 'alert a-ok'; alrt.textContent = msg; }
+      if (lbl)  lbl.textContent = '✓ ' + file.name + ' importado';
+      // Actualizar alert de la pestaña TN
+      var tnA = document.getElementById('el-tn-alert');
+      if (tnA) { tnA.className = 'alert a-ok'; tnA.textContent = msg; }
+    } catch(err) {
+      if (res) res.innerHTML = '<div class="alert a-warn">⚠ Error al procesar: ' + err.message + '</div>';
+    }
+  };
+  reader.readAsText(file, 'latin-1');
+}
+
+// ── Links ML↔TN ───────────────────────────────────────────────────────────────
+function buildLinks() {
+  links = {};
+  var bySku = {}, byName = {};
+  tnItems.forEach(function(tn) {
+    var s = (tn.sku || '').toLowerCase().trim();
+    var n = tn.name.toLowerCase().trim();
+    if (s) bySku[s]  = tn.id;
+    if (n) byName[n] = tn.id;
+  });
+  var parentMatch = {};
+  mlItems.forEach(function(ml) {
+    var key = ml.variationId ? ml.id + '_' + ml.variationId : ml.id;
+    var s = (ml.sku || '').toLowerCase().trim();
+    var n = ml.title.split(' — ')[0].toLowerCase().trim();
+    var tnId = (s && bySku[s]) || byName[n] || null;
+    if (tnId) { links[key] = tnId; if (!parentMatch[ml.id]) parentMatch[ml.id] = tnId; }
+  });
+  // Segunda pasada: variantes sin match heredan del padre
+  mlItems.forEach(function(ml) {
+    if (!ml.variationId) return;
+    var key = ml.id + '_' + ml.variationId;
+    if (!links[key] && parentMatch[ml.id]) links[key] = parentMatch[ml.id];
+  });
+}
+
+function linkKey(ml) { return ml.variationId ? ml.id + '_' + ml.variationId : ml.id; }
+function effML(ml)   { return cfg.usePromo && ml.promoPrice ? ml.promoPrice : ml.price; }
+
+// ── Sync ML ────────────────────────────────────────────────────────────────────
+async function syncAll() {
+  var btn  = document.getElementById('el-sync-btn');
+  var icon = document.getElementById('el-sync-icon');
+  btn.disabled = true; icon.className = 'spin'; icon.textContent = '⟳';
+
+  function setStatus(msg, type) {
+    var el = document.getElementById('el-comp-alert');
+    if (el) { el.className = 'alert ' + (type === 'ok' ? 'a-ok' : type === 'warn' ? 'a-warn' : 'a-info'); el.textContent = msg; }
+  }
+
+  try {
+    // Verificar token
+    setStatus('Verificando token de acceso...', 'info');
+    var r0 = await mlFetchRaw('/users/me');
+    if (!r0.ok) {
+      setStatus('⚠ Token inválido o vencido (HTTP ' + r0.status + '). Andá a Configuración y renovalo.', 'warn');
+      btn.disabled = false; icon.className = ''; icon.textContent = '⟳'; return;
+    }
+
+    // Paso 1: IDs
+    setStatus('Obteniendo lista de publicaciones...', 'info');
+    var allIds = [], offset = 0;
+    while (true) {
+      var r1 = await mlFetchRaw('/users/' + ML_USER_ID + '/items/search', { limit: 100, offset: offset });
+      if (!r1.ok) throw new Error('Error HTTP ' + r1.status + ' al buscar publicaciones');
+      var d1 = await r1.json();
+      if (d1.error) throw new Error(d1.message || 'Error en búsqueda');
+      allIds = allIds.concat(d1.results || []);
+      if ((d1.results || []).length < 100) break;
+      offset += 100;
+    }
+    if (!allIds.length) { setStatus('No se encontraron publicaciones en tu cuenta.', 'warn'); btn.disabled=false; icon.className=''; icon.textContent='⟳'; return; }
+
+    // Paso 2: Detalles
+    var raw = [];
+    for (var ci = 0; ci < allIds.length; ci += 20) {
+      setStatus('Cargando detalle... (' + Math.min(ci+20, allIds.length) + '/' + allIds.length + ')', 'info');
+      var chunk = allIds.slice(ci, ci + 20);
+      var r2 = await mlFetchRaw('/items', { ids: chunk.join(',') });
+      if (!r2.ok) throw new Error('Error HTTP ' + r2.status + ' en multiget');
+      var d2 = await r2.json();
+      if (!Array.isArray(d2)) throw new Error('Respuesta inesperada en multiget');
+      d2.forEach(function(x) { if (x.body) raw.push(x.body); });
+    }
+
+    // Paso 3: Precios promocionales en lotes de 10
+    var promoMap = {};
+    for (var pi = 0; pi < raw.length; pi += 10) {
+      if (pi % 50 === 0) setStatus('Verificando promos... (' + pi + '/' + raw.length + ')', 'info');
+      var batch = raw.slice(pi, pi + 10);
+      await Promise.all(batch.map(async function(item) {
+        try {
+          var rp = await mlFetchRaw('/items/' + item.id + '/prices');
+          if (!rp.ok) return;
+          var dp = await rp.json();
+          (dp.prices || []).forEach(function(p) {
+            if (p.regular_amount != null && p.amount && (!promoMap[item.id] || p.amount < promoMap[item.id]))
+              promoMap[item.id] = p.amount;
+          });
+        } catch(e) {}
+      }));
+    }
+
+    // Paso 4: Expandir variantes
+    mlItems = [];
+    raw.forEach(function(item) {
+      var promo = promoMap[item.id] || null;
+      var skuItem = '';
+      (item.attributes || []).forEach(function(a) { if (a.id === 'SELLER_SKU' && a.value_name) skuItem = a.value_name; });
+      skuItem = skuItem || item.seller_custom_field || '';
+
+      if (item.variations && item.variations.length > 0) {
+        item.variations.forEach(function(v) {
+          var skuV = '';
+          (v.attributes || []).forEach(function(a) { if (a.id === 'SELLER_SKU' && a.value_name) skuV = a.value_name; });
+          skuV = skuV || v.seller_custom_field || skuItem;
+          var attrs = (v.attribute_combinations || []).map(function(a) { return a.value_name; }).filter(Boolean).join(' / ');
+          var vp = v.price || item.price;
+          mlItems.push({ id: item.id, variationId: v.id,
+            title: attrs ? item.title + ' — ' + attrs : item.title,
+            price: vp, promoPrice: promo && promo < vp ? promo : null,
+            status: item.status, sku: skuV, availableQty: v.available_quantity || 0 });
+        });
+      } else {
+        mlItems.push({ id: item.id, variationId: null, title: item.title,
+          price: item.price, promoPrice: promo, status: item.status, sku: skuItem,
+          availableQty: item.available_quantity || 0 });
+      }
+    });
+
+    buildLinks();
+    renderAll();
+    document.getElementById('el-sync-time').textContent = 'Sync: ' + new Date().toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'});
+    var v = Object.keys(links).length;
+    if (!tnItems.length) setStatus('✓ ' + mlItems.length + ' publicaciones ML cargadas. Importá el CSV de Tienda Nube para comparar.', 'warn');
+    else setStatus('✓ Listo — ' + mlItems.length + ' ML · ' + tnItems.length + ' TN · ' + v + ' vinculados.', 'ok');
+
+  } catch(err) {
+    var el = document.getElementById('el-comp-alert');
+    if (el) { el.className = 'alert a-warn'; el.textContent = '⚠ ' + err.message; }
+    console.error(err);
+  }
+  btn.disabled = false; icon.className = ''; icon.textContent = '⟳';
+}
+
+// ── Ordenamiento ───────────────────────────────────────────────────────────────
+function doSort(table, key) {
+  var st = sortSt[table];
+  st.d = st.k === key ? st.d * -1 : 1; st.k = key;
+  // Actualizar headers
+  var pfx = table === 'comp' ? 'cs' : table === 'ml' ? 'ms' : 'ts';
+  document.querySelectorAll('[id^="' + pfx + '-"]').forEach(function(el) {
+    el.parentElement.classList.remove('asc','desc');
+  });
+  var el = document.getElementById(pfx + '-' + key);
+  if (el) el.parentElement.classList.add(st.d === 1 ? 'asc' : 'desc');
+  if (table === 'comp') renderComparison();
+  else if (table === 'ml') renderML();
+  else renderTN();
+}
+
+function sortArr(arr, key, d, accessor) {
+  return arr.slice().sort(function(a, b) {
+    var va = accessor(a, key), vb = accessor(b, key);
+    if (typeof va === 'string') return d * va.localeCompare(vb);
+    return d * ((va || 0) - (vb || 0));
+  });
+}
+
+// ── Render Comparación ─────────────────────────────────────────────────────────
+function renderComparison() {
+  var tbody = document.getElementById('tbody-comp');
+  var qF    = document.getElementById('comp-f-q') ? document.getElementById('comp-f-q').value.toLowerCase() : '';
+  var stF   = document.getElementById('comp-f-estado') ? document.getElementById('comp-f-estado').value : 'all';
+  var mlF   = document.getElementById('comp-f-ml') ? document.getElementById('comp-f-ml').value : 'all';
+
+  var tnSkus = {};
+  tnItems.forEach(function(t) { if (t.id) tnSkus[t.id] = true; });
+
+  var rows = mlItems.map(function(ml) {
+    var tnId = links[linkKey(ml)];
+    var tn   = tnId ? tnItems.find(function(t) { return t.id === tnId; }) : null;
+    var eML  = effML(ml);
+    var eTN  = tn ? (tn.promoPrice || tn.price) : null;
+    var diff = tn ? (eTN - eML) : null;
+    var pct  = tn && eML ? (diff / eML * 100) : null;
+    var hasDiff = tn && Math.abs(pct) > cfg.threshold;
+    return { ml: ml, tn: tn, eML: eML, eTN: eTN, diff: diff, pct: pct, hasDiff: hasDiff, linked: !!tn };
+  });
+
+  // Métricas
+  var tot=0, diffs=0, promos=0, nolinks=0;
+  rows.forEach(function(r) {
+    tot++; if (r.ml.promoPrice) promos++; if (!r.linked) nolinks++; else if (r.hasDiff) diffs++;
+  });
+  document.getElementById('st-total').textContent  = tot;
+  document.getElementById('st-diff').textContent   = diffs;
+  document.getElementById('st-promo').textContent  = promos;
+  document.getElementById('st-nolink').textContent = nolinks;
+
+  // Filtros
+  var filtered = rows.filter(function(r) {
+    if (qF && !r.ml.title.toLowerCase().includes(qF) && !r.ml.id.includes(qF)) return false;
+    if (mlF === 'active'   && r.ml.status !== 'active') return false;
+    if (mlF === 'inactive' && r.ml.status === 'active') return false;
+    if (stF === 'diff')   return r.linked && r.hasDiff;
+    if (stF === 'ok')     return r.linked && !r.hasDiff;
+    if (stF === 'promo')  return !!r.ml.promoPrice;
+    if (stF === 'nolink') return !r.linked;
+    return true;
+  });
+
+  // Sort
+  var st = sortSt.comp;
+  if (st.k) filtered = sortArr(filtered, st.k, st.d, function(r, k) {
+    if (k === 'title')   return r.ml.title.toLowerCase();
+    if (k === 'priceML') return r.eML || 0;
+    if (k === 'priceTN') return r.eTN || -1;
+    if (k === 'diff')    return r.diff !== null ? r.diff : -Infinity;
+    return 0;
+  });
+
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="5"><div class="empty">Sin resultados</div></td></tr>'; return; }
+
+  tbody.innerHTML = filtered.map(function(r) {
+    var ml = r.ml, tn = r.tn;
+    // Precio ML
+    var mlHtml = '<span class="price" style="color:var(--ml)">$' + r.eML.toLocaleString('es-AR') + '</span>';
+    if (ml.promoPrice && cfg.usePromo) mlHtml += '<span class="price-old">$' + ml.price.toLocaleString('es-AR') + '</span>';
+    // Precio TN
+    var tnHtml = tn ? '<span class="price">$' + r.eTN.toLocaleString('es-AR') + '</span>' +
+      (tn.promoPrice ? '<span class="price-old">$' + tn.price.toLocaleString('es-AR') + '</span>' : '') : '<span style="color:var(--muted)">—</span>';
+    // Diferencia
+    var diffHtml = '—';
+    if (r.linked) {
+      var sign = r.diff > 0 ? '+' : '', cls = r.diff > 0 ? 'color:var(--red)' : r.diff < 0 ? 'color:var(--green)' : 'color:var(--muted)';
+      diffHtml = '<span style="font-family:var(--mono);font-size:13px;' + cls + '">' + sign + '$' + Math.abs(r.diff).toLocaleString('es-AR') + '<br><small>' + sign + r.pct.toFixed(1) + '%</small></span>';
+    }
+    // Estado
+    var badges = '';
+    if (!r.linked) badges = '<span class="badge b-none">Sin vincular</span>';
+    else if (r.hasDiff) badges = '<span class="badge b-diff">Diferencia</span>';
+    else badges = '<span class="badge b-ok">OK</span>';
+    if (ml.promoPrice) badges += ' <span class="badge b-promo">Promo</span>';
+
+    return '<tr><td><div class="prod-name">' + ml.title + '</div><div class="prod-sub">' + ml.id + (ml.variationId ? ' / var:' + ml.variationId : '') + '</div></td>' +
+      '<td>' + mlHtml + '</td><td>' + tnHtml + '</td><td>' + diffHtml + '</td><td>' + badges + '</td></tr>';
+  }).join('');
+}
+
+// ── Render ML ──────────────────────────────────────────────────────────────────
+function renderML() {
+  var tbody = document.getElementById('tbody-ml');
+  if (!mlItems.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty">Hacé clic en "Sincronizar ahora" para cargar las publicaciones.</div></td></tr>'; return; }
+
+  var qF   = document.getElementById('ml-f-q')     ? document.getElementById('ml-f-q').value.toLowerCase()     : '';
+  var stF  = document.getElementById('ml-f-estado') ? document.getElementById('ml-f-estado').value : 'all';
+
+  var tnSkuSet = {};
+  tnItems.forEach(function(t) { if (t.sku) tnSkuSet[t.sku.toLowerCase()] = true; });
+
+  var filtered = mlItems.filter(function(ml) {
+    if (qF && !ml.title.toLowerCase().includes(qF) && !(ml.sku||'').toLowerCase().includes(qF) && !ml.id.includes(qF)) return false;
+    if (stF === 'active')   return ml.status === 'active';
+    if (stF === 'inactive') return ml.status !== 'active';
+    if (stF === 'linked')   return !!(ml.sku && tnSkuSet[ml.sku.toLowerCase()]);
+    if (stF === 'nosku')    return !(ml.sku||'').trim();
+    if (stF === 'promo')    return !!ml.promoPrice;
+    return true;
+  });
+
+  var st = sortSt.ml;
+  if (st.k) filtered = sortArr(filtered, st.k, st.d, function(ml, k) {
+    if (k === 'title')    return ml.title.toLowerCase();
+    if (k === 'sku')      return (ml.sku||'').toLowerCase();
+    if (k === 'price')    return ml.price || 0;
+    if (k === 'effPrice') return effML(ml);
+    if (k === 'status')   return ml.status || '';
+    return 0;
+  });
+
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty">Sin resultados</div></td></tr>'; return; }
+
+  tbody.innerHTML = filtered.map(function(ml) {
+    var sku = (ml.sku || '').trim();
+    var skuLinked = sku && tnSkuSet[sku.toLowerCase()];
+    var skuHtml = !sku
+      ? '<span class="badge b-nosku">Sin SKU</span>'
+      : skuLinked
+        ? '<span class="sku-ok">' + sku + '</span><div style="font-size:10px;color:var(--green);margin-top:2px;">✓ vinculado TN</div>'
+        : '<span class="sku-err">' + sku + '</span><div style="font-size:10px;color:var(--red);margin-top:2px;">✗ sin match TN</div>';
+    var promoHtml = ml.promoPrice ? '<span class="badge b-promo">$' + ml.promoPrice.toLocaleString('es-AR') + '</span>' : '<span style="color:var(--muted)">—</span>';
+    var eff = effML(ml);
+    var effHtml = ml.promoPrice && cfg.usePromo
+      ? '<span class="price" style="color:var(--green)">$' + eff.toLocaleString('es-AR') + '</span>'
+      : '<span class="price">$' + eff.toLocaleString('es-AR') + '</span>';
+    var stBadge = '<span class="badge ' + (ml.status === 'active' ? 'b-ok' : 'b-none') + '">' + ml.status + '</span>';
+    var rowCls = !sku ? 'row-dimmed' : !skuLinked ? 'row-nolink' : '';
+    return '<tr class="' + rowCls + '"><td><div class="prod-name">' + ml.title + '</div>' +
+      (ml.variationId ? '<div class="prod-sub">Var: ' + ml.variationId + '</div>' : '') + '</td>' +
+      '<td>' + skuHtml + '</td>' +
+      '<td><span class="price">$' + ml.price.toLocaleString('es-AR') + '</span></td>' +
+      '<td>' + promoHtml + '</td><td>' + effHtml + '</td><td>' + stBadge + '</td></tr>';
+  }).join('');
+}
+
+// ── Render TN ──────────────────────────────────────────────────────────────────
+function renderTN() {
+  var tbody = document.getElementById('tbody-tn');
+  if (!tnItems.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty">Importá el CSV de Tienda Nube desde Configuración.</div></td></tr>'; return; }
+
+  var qF  = document.getElementById('tn-f-q')     ? document.getElementById('tn-f-q').value.toLowerCase()     : '';
+  var stF = document.getElementById('tn-f-estado') ? document.getElementById('tn-f-estado').value : 'all';
+
+  var mlSkuSet = {};
+  mlItems.forEach(function(m) { if (m.sku) mlSkuSet[m.sku.toLowerCase()] = true; });
+
+  var filtered = tnItems.filter(function(tn) {
+    if (qF && !tn.name.toLowerCase().includes(qF) && !(tn.sku||'').toLowerCase().includes(qF)) return false;
+    if (stF === 'visible') return tn.visible;
+    if (stF === 'hidden')  return !tn.visible;
+    if (stF === 'linked')  return !!(tn.sku && mlSkuSet[tn.sku.toLowerCase()]);
+    if (stF === 'nosku')   return !(tn.sku||'').trim();
+    if (stF === 'promo')   return !!tn.promoPrice;
+    return true;
+  });
+
+  var st = sortSt.tn;
+  if (st.k) filtered = sortArr(filtered, st.k, st.d, function(tn, k) {
+    if (k === 'name')     return tn.name.toLowerCase();
+    if (k === 'sku')      return (tn.sku||'').toLowerCase();
+    if (k === 'price')    return tn.price || 0;
+    if (k === 'effPrice') return tn.promoPrice || tn.price || 0;
+    if (k === 'visible')  return tn.visible ? 1 : 0;
+    return 0;
+  });
+
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty">Sin resultados</div></td></tr>'; return; }
+
+  tbody.innerHTML = filtered.map(function(tn) {
+    var sku = (tn.sku || '').trim();
+    var skuLinked = sku && mlSkuSet[sku.toLowerCase()];
+    var skuHtml = !sku
+      ? '<span class="badge b-nosku">Sin SKU</span>'
+      : skuLinked
+        ? '<span class="sku-ok">' + sku + '</span><div style="font-size:10px;color:var(--green);margin-top:2px;">✓ vinculado ML</div>'
+        : '<span class="sku-err">' + sku + '</span><div style="font-size:10px;color:var(--red);margin-top:2px;">✗ sin match ML</div>';
+    var promoHtml = tn.promoPrice ? '<span class="badge b-promo">$' + tn.promoPrice.toLocaleString('es-AR') + '</span>' : '<span style="color:var(--muted)">—</span>';
+    var eff = tn.promoPrice || tn.price;
+    var effHtml = tn.promoPrice
+      ? '<span class="price" style="color:var(--green)">$' + eff.toLocaleString('es-AR') + '</span>'
+      : '<span class="price">$' + eff.toLocaleString('es-AR') + '</span>';
+    var stBadge = '<span class="badge ' + (tn.visible ? 'b-ok' : 'b-none') + '">' + (tn.visible ? 'Visible' : 'Oculto') + '</span>';
+    var rowCls = !sku ? 'row-dimmed' : !skuLinked ? 'row-nolink' : '';
+    return '<tr class="' + rowCls + '"><td><div class="prod-name">' + tn.name + '</div></td>' +
+      '<td>' + skuHtml + '</td>' +
+      '<td><span class="price">$' + tn.price.toLocaleString('es-AR') + '</span></td>' +
+      '<td>' + promoHtml + '</td><td>' + effHtml + '</td><td>' + stBadge + '</td></tr>';
+  }).join('');
+}
+
+// ── Render All ─────────────────────────────────────────────────────────────────
+function renderAll() { renderComparison(); renderML(); renderTN(); }
+
+// ── Config ─────────────────────────────────────────────────────────────────────
+function saveConfig() {
+  var up = document.getElementById('cfg-use-promo');
+  var th = document.getElementById('cfg-threshold');
+  if (up) cfg.usePromo   = up.checked;
+  if (th) cfg.threshold  = parseFloat(th.value) || 0;
+  try { localStorage.setItem('pricesync_cfg', JSON.stringify(cfg)); } catch(e) {}
+  renderAll();
+}
+
+// ── Export CSV ─────────────────────────────────────────────────────────────────
+function exportCSV() {
+  var rows = [['Producto','ID ML','Precio ML','Promo ML','Precio eff ML','Precio TN','Diferencia $','Diferencia %','Estado']];
+  mlItems.forEach(function(ml) {
+    var tnId = links[linkKey(ml)];
+    var tn   = tnId ? tnItems.find(function(t) { return t.id === tnId; }) : null;
+    var eML  = effML(ml);
+    var eTN  = tn ? (tn.promoPrice || tn.price) : '';
+    var diff = tn ? (eTN - eML).toFixed(2) : '';
+    var pct  = tn && eML ? ((eTN - eML) / eML * 100).toFixed(2) + '%' : '';
+    var est  = !tn ? 'Sin vincular' : Math.abs((eTN - eML) / eML * 100) > cfg.threshold ? 'Diferencia' : 'OK';
+    rows.push([ml.title, ml.id, ml.price, ml.promoPrice||'', eML, eTN, diff, pct, est]);
+  });
+  var csv  = rows.map(function(r) { return r.map(function(c) { return '"' + String(c).replace(/"/g,'""') + '"'; }).join(','); }).join('\r\n');
+  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'precios_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+document.getElementById('el-date').textContent = new Date().toLocaleDateString('es-AR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+
+// Cargar config y TN desde localStorage
+try {
+  var _cfg = localStorage.getItem('pricesync_cfg');
+  if (_cfg) cfg = Object.assign(cfg, JSON.parse(_cfg));
+} catch(e) {}
+try {
+  var _tn = localStorage.getItem('pricesync_tn');
+  if (_tn) { tnItems = JSON.parse(_tn); buildLinks(); }
+} catch(e) {}
+
+// Aplicar config a UI
+(function() {
+  var up = document.getElementById('cfg-use-promo');
+  var th = document.getElementById('cfg-threshold');
+  if (up) up.checked  = cfg.usePromo;
+  if (th) th.value    = cfg.threshold;
+})();
+
+// Mostrar estado de TN si hay datos
+if (tnItems.length > 0) {
+  var _tnA = document.getElementById('el-tn-alert');
+  var _tnC = document.getElementById('el-tn-cfg-alert');
+  var _msg = '✓ ' + tnItems.length + ' productos cargados desde el último CSV';
+  if (_tnA) { _tnA.className = 'alert a-ok'; _tnA.textContent = _msg; }
+  if (_tnC) { _tnC.className = 'alert a-ok'; _tnC.textContent = _msg; }
+}
+
+renderAll();
+refreshTokenStatus();
+setInterval(refreshTokenStatus, 60000);
+</script>
+</body>
+</html>
