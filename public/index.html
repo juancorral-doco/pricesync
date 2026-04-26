@@ -34,7 +34,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 
 /* Layout */
 .layout{display:grid;grid-template-columns:210px 1fr;min-height:calc(100vh - 53px);}
-.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:20px 0;}
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:20px 0;overflow-y:auto;max-height:calc(100vh - 53px);position:sticky;top:0;}
 .sidebar-label{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;padding:0 22px;margin-bottom:6px;}
 .nav-item{display:flex;align-items:center;gap:9px;padding:8px 14px 8px 18px;font-size:13px;color:var(--muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;border-radius:6px;margin:1px 4px;width:calc(100% - 8px);}
 .nav-item:hover{color:var(--text);background:var(--surface2);}
@@ -343,14 +343,16 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
             <th class="sort" onclick="doSort('calc','nom')"><span id="cas-nom">PRODUCTO</span></th>
             <th class="sort" onclick="doSort('calc','costo')"><span id="cas-costo">COSTO C/IVA</span></th>
             <th class="sort" onclick="doSort('calc','precioML')"><span id="cas-precioML">PRECIO ML</span></th>
+            <th>PRECIO ACTUAL ML</th>
             <th class="sort" onclick="doSort('calc','ganML')"><span id="cas-ganML">GANANCIA ML $</span></th>
-            <th class="sort" onclick="doSort('calc','ganMLpct')"><span id="cas-ganMLpct">GANANCIA ML % (s/vta)</span></th>
+            <th class="sort" onclick="doSort('calc','ganMLpct')"><span id="cas-ganMLpct">GANANCIA ML %</span></th>
             <th class="sort" onclick="doSort('calc','precioTN')"><span id="cas-precioTN">PRECIO TN</span></th>
+            <th>PRECIO ACTUAL TN</th>
             <th class="sort" onclick="doSort('calc','ganTN')"><span id="cas-ganTN">GANANCIA TN $</span></th>
-            <th class="sort" onclick="doSort('calc','ganTNpct')"><span id="cas-ganTNpct">GANANCIA TN % (s/vta)</span></th>
+            <th class="sort" onclick="doSort('calc','ganTNpct')"><span id="cas-ganTNpct">GANANCIA TN %</span></th>
           </tr></thead>
           <tbody id="tbody-calc">
-            <tr><td colspan="9"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>
+            <tr><td colspan="11"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -1137,16 +1139,35 @@ function calcPrecios() {
     // % sobre precio de venta = lo que el usuario ingresó en el campo F
     var ganMLpct  = precioML ? (ganMLval / precioML * 100) : 0;
     var ganTNpct  = precioTN ? (ganTNval / precioTN * 100) : 0;
+    // Cruzar precio actual de ML por nombre (case-insensitive, match parcial)
+    var nomLow = prod.nom.toLowerCase().trim();
+    var matchML = mlItems.find(function(ml) {
+      var t = ml.title.split(' — ')[0].toLowerCase().trim();
+      return t === nomLow || t.includes(nomLow) || nomLow.includes(t);
+    });
+    var matchTN = tnItems.find(function(tn) {
+      var t = tn.name.toLowerCase().trim();
+      return t === nomLow || t.includes(nomLow) || nomLow.includes(t);
+    });
+    var actMLPrice = matchML ? (matchML.promoPrice || matchML.price) : null;
+    var actMLHasPromo = matchML && !!matchML.promoPrice;
+    var actTNPrice = matchTN ? (matchTN.promoPrice || matchTN.price) : null;
+    var actTNHasPromo = matchTN && !!matchTN.promoPrice;
+
     return {
-      cat:      prod.cat,
-      nom:      prod.nom,
-      costo:    prod.costo,
-      precioML: precioML,
-      precioTN: precioTN,
-      ganML:    ganMLval,
-      ganMLpct: ganMLpct,
-      ganTN:    ganTNval,
-      ganTNpct: ganTNpct,
+      cat:         prod.cat,
+      nom:         prod.nom,
+      costo:       prod.costo,
+      precioML:    precioML,
+      precioTN:    precioTN,
+      ganML:       ganMLval,
+      ganMLpct:    ganMLpct,
+      ganTN:       ganTNval,
+      ganTNpct:    ganTNpct,
+      actMLPrice:  actMLPrice,
+      actMLHasPromo: actMLHasPromo,
+      actTNPrice:  actTNPrice,
+      actTNHasPromo: actTNHasPromo,
     };
   });
 
@@ -1191,7 +1212,7 @@ function renderCalc() {
     });
   }
 
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="9"><div class="empty">Sin resultados</div></td></tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="11"><div class="empty">Sin resultados</div></td></tr>'; return; }
 
   function fmt(n) { return n != null ? '$' + Math.round(n).toLocaleString('es-AR') : '—'; }
   function fmtPct(n) { return n != null ? n.toFixed(1) + '%' : '—'; }
@@ -1199,14 +1220,37 @@ function renderCalc() {
   tbody.innerHTML = filtered.map(function(r) {
     var ganMLColor = r.ganML > 0 ? 'color:var(--green);font-weight:500;' : 'color:var(--red);';
     var ganTNColor = r.ganTN > 0 ? 'color:var(--green);font-weight:500;' : 'color:var(--red);';
+        // Celda precio actual ML
+    var actMLCell = '<span style="color:var(--muted);font-size:12px;">Sin datos ML</span>';
+    if (r.actMLPrice) {
+      var diffML = r.precioML ? Math.round(r.actMLPrice - r.precioML) : 0;
+      var diffMLColor = diffML >= 0 ? 'color:var(--green)' : 'color:var(--red)';
+      var diffMLSign  = diffML >= 0 ? '+' : '';
+      actMLCell = '<span class="price" style="font-weight:500;">$' + Math.round(r.actMLPrice).toLocaleString('es-AR') + '</span>' +
+        (r.actMLHasPromo ? '<span style="font-size:10px;color:var(--amber);display:block;">con promo</span>' : '') +
+        '<span style="font-size:10px;' + diffMLColor + ';display:block;">' + diffMLSign + '$' + Math.abs(diffML).toLocaleString('es-AR') + ' vs óptimo</span>';
+    }
+    // Celda precio actual TN
+    var actTNCell = '<span style="color:var(--muted);font-size:12px;">Sin datos TN</span>';
+    if (r.actTNPrice) {
+      var diffTN = r.precioTN ? Math.round(r.actTNPrice - r.precioTN) : 0;
+      var diffTNColor = diffTN >= 0 ? 'color:var(--green)' : 'color:var(--red)';
+      var diffTNSign  = diffTN >= 0 ? '+' : '';
+      actTNCell = '<span class="price" style="font-weight:500;">$' + Math.round(r.actTNPrice).toLocaleString('es-AR') + '</span>' +
+        (r.actTNHasPromo ? '<span style="font-size:10px;color:var(--amber);display:block;">con promo</span>' : '') +
+        '<span style="font-size:10px;' + diffTNColor + ';display:block;">' + diffTNSign + '$' + Math.abs(diffTN).toLocaleString('es-AR') + ' vs óptimo</span>';
+    }
+
     return '<tr>' +
       '<td><span style="font-size:11px;color:var(--muted);">' + r.cat + '</span></td>' +
       '<td><div class="prod-name" style="font-size:13px;">' + r.nom + '</div></td>' +
       '<td><span class="price">$' + Math.round(r.costo).toLocaleString('es-AR') + '</span></td>' +
       '<td><span class="price" style="color:var(--ml);font-weight:600;">' + fmt(r.precioML) + '</span></td>' +
+      '<td>' + actMLCell + '</td>' +
       '<td><span style="font-family:var(--mono);font-size:13px;' + ganMLColor + '">' + fmt(r.ganML) + '</span></td>' +
       '<td><span class="badge b-ok">' + fmtPct(r.ganMLpct) + '</span></td>' +
       '<td><span class="price" style="color:var(--tn);font-weight:600;">' + fmt(r.precioTN) + '</span></td>' +
+      '<td>' + actTNCell + '</td>' +
       '<td><span style="font-family:var(--mono);font-size:13px;' + ganTNColor + '">' + fmt(r.ganTN) + '</span></td>' +
       '<td><span class="badge b-ok">' + fmtPct(r.ganTNpct) + '</span></td>' +
       '</tr>';
@@ -1215,16 +1259,18 @@ function renderCalc() {
 
 function exportCalcCSV() {
   if (!calcResults.length) { alert('Primero calculá los precios'); return; }
-  var rows = [['Categoría','Producto','Costo c/IVA','Precio ML','Ganancia ML $','Ganancia ML %','Precio TN','Ganancia TN $','Ganancia TN %']];
+  var rows = [['Categoría','Producto','Costo c/IVA','Precio ML','Precio Actual ML','Ganancia ML $','Ganancia ML %','Precio TN','Precio Actual TN','Ganancia TN $','Ganancia TN %']];
   calcResults.forEach(function(r) {
     rows.push([
       r.cat, r.nom, Math.round(r.costo),
-      r.precioML ? Math.round(r.precioML) : '',
-      r.ganML    ? Math.round(r.ganML)    : '',
-      r.ganMLpct ? r.ganMLpct.toFixed(1) + '%' : '',
-      r.precioTN ? Math.round(r.precioTN) : '',
-      r.ganTN    ? Math.round(r.ganTN)    : '',
-      r.ganTNpct ? r.ganTNpct.toFixed(1) + '%' : '',
+      r.precioML    ? Math.round(r.precioML)    : '',
+      r.actMLPrice  ? Math.round(r.actMLPrice)  : 'Sin datos',
+      r.ganML       ? Math.round(r.ganML)       : '',
+      r.ganMLpct    ? r.ganMLpct.toFixed(1) + '%' : '',
+      r.precioTN    ? Math.round(r.precioTN)    : '',
+      r.actTNPrice  ? Math.round(r.actTNPrice)  : 'Sin datos',
+      r.ganTN       ? Math.round(r.ganTN)       : '',
+      r.ganTNpct    ? r.ganTNpct.toFixed(1) + '%' : '',
     ]);
   });
   var csv = rows.map(function(r) { return r.map(function(c) { return '"' + String(c).replace(/"/g,'""') + '"'; }).join(','); }).join('\r\n');
