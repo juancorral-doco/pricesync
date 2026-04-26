@@ -342,17 +342,15 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
             <th class="sort" onclick="doSort('calc','cat')"><span id="cas-cat">CATEGORÍA</span></th>
             <th class="sort" onclick="doSort('calc','nom')"><span id="cas-nom">PRODUCTO</span></th>
             <th class="sort" onclick="doSort('calc','costo')"><span id="cas-costo">COSTO C/IVA</span></th>
-            <th class="sort" onclick="doSort('calc','costoOp')"><span id="cas-costoOp">COSTOS (A)</span></th>
-            <th class="sort" onclick="doSort('calc','comML')"><span id="cas-comML">COM. ML (B)</span></th>
-            <th class="sort" onclick="doSort('calc','envio')"><span id="cas-envio">ENVÍO (C)</span></th>
-            <th class="sort" onclick="doSort('calc','imp')"><span id="cas-imp">IMPUESTOS (D)</span></th>
-            <th class="sort" onclick="doSort('calc','comTN')"><span id="cas-comTN">COM. TN (E)</span></th>
-            <th class="sort" onclick="doSort('calc','ganancia')"><span id="cas-ganancia">GANANCIA (F)</span></th>
             <th class="sort" onclick="doSort('calc','precioML')"><span id="cas-precioML">PRECIO ML</span></th>
+            <th class="sort" onclick="doSort('calc','ganML')"><span id="cas-ganML">GANANCIA ML $</span></th>
+            <th class="sort" onclick="doSort('calc','ganMLpct')"><span id="cas-ganMLpct">GANANCIA ML %</span></th>
             <th class="sort" onclick="doSort('calc','precioTN')"><span id="cas-precioTN">PRECIO TN</span></th>
+            <th class="sort" onclick="doSort('calc','ganTN')"><span id="cas-ganTN">GANANCIA TN $</span></th>
+            <th class="sort" onclick="doSort('calc','ganTNpct')"><span id="cas-ganTNpct">GANANCIA TN %</span></th>
           </tr></thead>
           <tbody id="tbody-calc">
-            <tr><td colspan="11"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>
+            <tr><td colspan="9"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -1129,24 +1127,25 @@ function calcPrecios() {
   calcResults = preciosData.map(function(prod) {
     var precioML = calcPrecioPublicacion(prod.costo, p);
     var precioTN = calcPrecioTN(prod.costo, p);
-    var costoOp = prod.costo * p.op  / 100;
-    var comML   = precioML ? precioML * p.ml  / 100 : 0;
-    var envio   = precioML ? precioML * p.env / 100 : 0;
-    var imp     = precioML ? precioML * p.imp / 100 : 0;
-    var comTN   = precioTN ? precioTN * p.tn  / 100 : 0;
-    var ganML   = precioML ? precioML * p.gan / 100 : 0;
+    // Ganancia real = precio de venta - costo - todos los costos sobre el precio
+    var costosTotalesML = precioML ? precioML * (p.op/100 + p.ml/100 + p.env/100 + p.imp/100) : 0;
+    var costosTotalesTN = precioTN ? precioTN * (p.op/100 + p.tn/100 + p.imp/100) : 0;
+    var ganML    = precioML ? precioML - prod.costo - costosTotalesML + prod.costo * p.op/100 : 0;
+    // Simplificado: ganancia = precio * ganancia%
+    var ganMLval  = precioML ? precioML * p.gan / 100 : 0;
+    var ganTNval  = precioTN ? precioTN * p.gan / 100 : 0;
+    var ganMLpct  = precioML ? (ganMLval / prod.costo * 100) : 0;
+    var ganTNpct  = precioTN ? (ganTNval / prod.costo * 100) : 0;
     return {
       cat:      prod.cat,
       nom:      prod.nom,
       costo:    prod.costo,
-      costoOp:  costoOp,
-      comML:    comML,
-      envio:    envio,
-      imp:      imp,
-      comTN:    comTN,
-      ganancia: ganML,
       precioML: precioML,
       precioTN: precioTN,
+      ganML:    ganMLval,
+      ganMLpct: ganMLpct,
+      ganTN:    ganTNval,
+      ganTNpct: ganTNpct,
     };
   });
 
@@ -1191,35 +1190,41 @@ function renderCalc() {
     });
   }
 
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="11"><div class="empty">Sin resultados</div></td></tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="9"><div class="empty">Sin resultados</div></td></tr>'; return; }
 
   function fmt(n) { return n != null ? '$' + Math.round(n).toLocaleString('es-AR') : '—'; }
+  function fmtPct(n) { return n != null ? n.toFixed(1) + '%' : '—'; }
 
   tbody.innerHTML = filtered.map(function(r) {
-    var precioMLOk = r.precioML != null;
+    var ganMLColor = r.ganML > 0 ? 'color:var(--green);font-weight:500;' : 'color:var(--red);';
+    var ganTNColor = r.ganTN > 0 ? 'color:var(--green);font-weight:500;' : 'color:var(--red);';
     return '<tr>' +
       '<td><span style="font-size:11px;color:var(--muted);">' + r.cat + '</span></td>' +
       '<td><div class="prod-name" style="font-size:13px;">' + r.nom + '</div></td>' +
       '<td><span class="price">$' + Math.round(r.costo).toLocaleString('es-AR') + '</span></td>' +
-      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--muted);">' + fmt(r.costoOp) + '</span></td>' +
-      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--muted);">' + fmt(r.comML) + '</span></td>' +
-      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--muted);">' + fmt(r.envio) + '</span></td>' +
-      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--muted);">' + fmt(r.imp) + '</span></td>' +
-      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--muted);">' + fmt(r.comTN) + '</span></td>' +
-      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--green);">' + fmt(r.ganancia) + '</span></td>' +
-      '<td><span class="price" style="' + (precioMLOk ? 'color:var(--ml);font-weight:600;' : 'color:var(--red);') + '">' + fmt(r.precioML) + '</span></td>' +
-      '<td><span class="price" style="' + (r.precioTN != null ? 'color:var(--tn);font-weight:600;' : 'color:var(--red);') + '">' + fmt(r.precioTN) + '</span></td>' +
+      '<td><span class="price" style="color:var(--ml);font-weight:600;">' + fmt(r.precioML) + '</span></td>' +
+      '<td><span style="font-family:var(--mono);font-size:13px;' + ganMLColor + '">' + fmt(r.ganML) + '</span></td>' +
+      '<td><span class="badge ' + (r.ganMLpct >= 20 ? 'b-ok' : 'b-diff') + '">' + fmtPct(r.ganMLpct) + '</span></td>' +
+      '<td><span class="price" style="color:var(--tn);font-weight:600;">' + fmt(r.precioTN) + '</span></td>' +
+      '<td><span style="font-family:var(--mono);font-size:13px;' + ganTNColor + '">' + fmt(r.ganTN) + '</span></td>' +
+      '<td><span class="badge ' + (r.ganTNpct >= 20 ? 'b-ok' : 'b-diff') + '">' + fmtPct(r.ganTNpct) + '</span></td>' +
       '</tr>';
   }).join('');
 }
 
 function exportCalcCSV() {
   if (!calcResults.length) { alert('Primero calculá los precios'); return; }
-  var rows = [['Categoría','Producto','Costo c/IVA','Costos Op (A)','Com ML (B)','Envío (C)','Impuestos (D)','Com TN (E)','Ganancia (F)','Precio ML','Precio TN']];
+  var rows = [['Categoría','Producto','Costo c/IVA','Precio ML','Ganancia ML $','Ganancia ML %','Precio TN','Ganancia TN $','Ganancia TN %']];
   calcResults.forEach(function(r) {
-    rows.push([r.cat, r.nom, Math.round(r.costo), Math.round(r.costoOp), Math.round(r.comML),
-      Math.round(r.envio), Math.round(r.imp), Math.round(r.comTN), Math.round(r.ganancia),
-      r.precioML ? Math.round(r.precioML) : '', r.precioTN ? Math.round(r.precioTN) : '']);
+    rows.push([
+      r.cat, r.nom, Math.round(r.costo),
+      r.precioML ? Math.round(r.precioML) : '',
+      r.ganML    ? Math.round(r.ganML)    : '',
+      r.ganMLpct ? r.ganMLpct.toFixed(1) + '%' : '',
+      r.precioTN ? Math.round(r.precioTN) : '',
+      r.ganTN    ? Math.round(r.ganTN)    : '',
+      r.ganTNpct ? r.ganTNpct.toFixed(1) + '%' : '',
+    ]);
   });
   var csv = rows.map(function(r) { return r.map(function(c) { return '"' + String(c).replace(/"/g,'""') + '"'; }).join(','); }).join('\r\n');
   var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
