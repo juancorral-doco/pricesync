@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Price Sync — ML × TN</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root {
   --bg:#f5f5f3; --surface:#fff; --surface2:#f0f0ee;
@@ -146,6 +147,9 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
     <button class="nav-item" id="nav-tn" onclick="goPage('tn')">
       <span class="nav-dot" style="background:var(--tn);opacity:.5;"></span> Tienda Nube
     </button>
+    <button class="nav-item" id="nav-calc" onclick="goPage('calc')">
+      <span class="nav-dot" style="background:var(--green);"></span> Calculá tu Precio Óptimo
+    </button>
     <button class="nav-item" id="nav-config" onclick="goPage('config')">
       <span class="nav-dot" style="background:var(--muted);"></span> Configuración
     </button>
@@ -260,6 +264,100 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
       </div>
     </div>
 
+    <!-- ── CALCULÁ TU PRECIO ÓPTIMO ── -->
+    <div class="page" id="page-calc">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Calculá tu Precio Óptimo</div>
+          <div class="page-sub">Ingresá tus costos y márgenes para calcular el precio de publicación ideal</div>
+        </div>
+        <button class="export-btn" onclick="exportCalcCSV()">↓ Exportar CSV</button>
+      </div>
+
+      <!-- Parámetros -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:14px;">Parámetros de cálculo</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;" id="calc-params-grid">
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--mono);">A — COSTOS OPERATIVOS %</div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="number" class="cfg-input" id="cp-op" value="10" min="0" max="100" step="0.1" style="width:80px;">
+              <span style="color:var(--muted);font-size:13px;">%</span>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--mono);">B — COMISIÓN MERCADOLIBRE %</div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="number" class="cfg-input" id="cp-ml" value="13" min="0" max="100" step="0.1" style="width:80px;">
+              <span style="color:var(--muted);font-size:13px;">%</span>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--mono);">C — COSTO DE ENVÍO %</div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="number" class="cfg-input" id="cp-env" value="8" min="0" max="100" step="0.1" style="width:80px;">
+              <span style="color:var(--muted);font-size:13px;">%</span>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--mono);">D — IMPUESTOS %</div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="number" class="cfg-input" id="cp-imp" value="3" min="0" max="100" step="0.1" style="width:80px;">
+              <span style="color:var(--muted);font-size:13px;">%</span>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--mono);">E — COMISIÓN TIENDA NUBE %</div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="number" class="cfg-input" id="cp-tn" value="3" min="0" max="100" step="0.1" style="width:80px;">
+              <span style="color:var(--muted);font-size:13px;">%</span>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--mono);">F — GANANCIA ESPERADA %</div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="number" class="cfg-input" id="cp-gan" value="30" min="0" max="500" step="0.1" style="width:80px;">
+              <span style="color:var(--muted);font-size:13px;">%</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="sync-btn" onclick="calcPrecios()" style="padding:9px 24px;">▶ Calcular</button>
+          <div style="font-size:12px;color:var(--muted);" id="calc-formula-desc"></div>
+        </div>
+      </div>
+
+      <!-- Filtros -->
+      <div class="filters">
+        <select class="f-select" id="calc-f-cat" onchange="renderCalc()">
+          <option value="all">Todas las categorías</option>
+        </select>
+        <input class="f-input" type="text" id="calc-f-q" placeholder="Buscar producto..." oninput="renderCalc()">
+      </div>
+
+      <!-- Tabla -->
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th class="sort" onclick="doSort('calc','cat')"><span id="cas-cat">CATEGORÍA</span></th>
+            <th class="sort" onclick="doSort('calc','nom')"><span id="cas-nom">PRODUCTO</span></th>
+            <th class="sort" onclick="doSort('calc','costo')"><span id="cas-costo">COSTO C/IVA</span></th>
+            <th class="sort" onclick="doSort('calc','costoOp')"><span id="cas-costoOp">COSTOS (A)</span></th>
+            <th class="sort" onclick="doSort('calc','comML')"><span id="cas-comML">COM. ML (B)</span></th>
+            <th class="sort" onclick="doSort('calc','envio')"><span id="cas-envio">ENVÍO (C)</span></th>
+            <th class="sort" onclick="doSort('calc','imp')"><span id="cas-imp">IMPUESTOS (D)</span></th>
+            <th class="sort" onclick="doSort('calc','comTN')"><span id="cas-comTN">COM. TN (E)</span></th>
+            <th class="sort" onclick="doSort('calc','ganancia')"><span id="cas-ganancia">GANANCIA (F)</span></th>
+            <th class="sort" onclick="doSort('calc','precioML')"><span id="cas-precioML">PRECIO ML</span></th>
+            <th class="sort" onclick="doSort('calc','precioTN')"><span id="cas-precioTN">PRECIO TN</span></th>
+          </tr></thead>
+          <tbody id="tbody-calc">
+            <tr><td colspan="11"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ── CONFIGURACIÓN ── -->
     <div class="page" id="page-config">
       <div class="page-header"><div><div class="page-title">Configuración</div></div></div>
@@ -293,6 +391,25 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
           <span class="cfg-label">Umbral de diferencia ignorada (%)</span>
           <input type="number" class="cfg-input" id="cfg-threshold" value="0" min="0" max="50" onchange="saveConfig()">
         </div>
+      </div>
+
+      <div class="cfg-group">
+        <h3>📊 Lista de Precios — Importar Excel</h3>
+        <div class="alert a-info" id="el-excel-cfg-alert">
+          Importá tu lista de precios (.xlsx) con columnas: CATEGORIA, PRODUCTO, COSTO C/IVA.<br>
+          <span style="font-size:11px;">Los precios deben estar en Pesos Argentinos con IVA incluido.</span>
+        </div>
+        <div class="drop-zone" id="el-excel-drop"
+          onclick="document.getElementById('el-excel-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--green)'"
+          ondragleave="this.style.borderColor=''"
+          ondrop="onExcelDrop(event)">
+          <div style="font-size:26px;margin-bottom:8px;">📊</div>
+          <div style="font-weight:500;" id="el-excel-drop-label">Arrastrá el Excel acá o hacé clic para seleccionar</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">Archivo .xlsx con columnas CATEGORIA, PRODUCTO, COSTO C/IVA</div>
+          <input type="file" id="el-excel-input" accept=".xlsx,.xls" style="display:none" onchange="onExcelSelect(event)">
+        </div>
+        <div id="el-excel-result" style="margin-top:10px;"></div>
       </div>
 
       <div class="cfg-group">
@@ -371,12 +488,16 @@ async function mlFetchRaw(path, params) {
   }
 }
 
+// ── Datos de precios (cargados desde Excel) ───────────────────────────────────
+let preciosData = [{"cat": "AIREACION", "nom": "5 Piedras Difusoras 5cm Ideal Acuarios E Hidroponía", "costo": 2111.72}, {"cat": "AIREACION", "nom": "Aireador 2 salidas", "costo": 8808.8}, {"cat": "AIREACION", "nom": "Aireador 2 Salidas Mighty Air93 Hidroponia +piedra+manguera", "costo": 10471.82}, {"cat": "AIREACION", "nom": "Aireador 2 Salidas Rs-390 Hidroponia +piedras+mangueras", "costo": 10471.82}, {"cat": "AIREACION", "nom": "Aireador 4 Salidas Rs-8801 Con Manguera, Piedra Y Ventosa", "costo": 36788.64}, {"cat": "AIREACION", "nom": "Aireador Bomba De Aire 2 Salidas Con Regulador Rs 1002", "costo": 8808.8}, {"cat": "AIREACION", "nom": "Aireador Rs 8801 4 Salidas C/regulador Pecera Hidroponia", "costo": 33495.48}, {"cat": "AIREACION", "nom": "Aireador Rs 8801 4 Salidas C/regulador Pecera Hidroponia Voltaje : 220V", "costo": 33495.48}, {"cat": "AIREACION", "nom": "Aireador Silencioso Sobo Sb 548 1 Salida + Piedra + Manguera", "costo": 7199.66}, {"cat": "AIREACION", "nom": "Aireador Sobo Sb 333a 1 Salida 3w +piedra +manguera +ventosa", "costo": 7184.94}, {"cat": "AIREACION", "nom": "Bomba Rs-023 3000l/h 2 Mt Pecera Fuente Estanque", "costo": 29529.51}, {"cat": "AIREACION", "nom": "Bomba Rs-932 820 L/h Fuentes, Cascadas, Estanque, Pecera", "costo": 13131.3}, {"cat": "AIREACION", "nom": "Bomba Rs942 1000 L/h 2mt Hidroponia Estanques Peceras Voltaje : 220V", "costo": 17307.06}, {"cat": "AIREACION", "nom": "Bomba Sumergible Mighty Flow 93 13.667 L/min 1.8m Para Acuarios Y Estanques", "costo": 13131.3}, {"cat": "AIREACION", "nom": "Combo Aireacion Piedra Aireador, Manguera Y Conectores", "costo": 5399.19}, {"cat": "AIREACION", "nom": "Manguera Negra 6x4 Aireador Hidroponia Pecera X 10 Mtrs", "costo": 1619.93}, {"cat": "AIREACION", "nom": "Piedra difusora 5cm", "costo": 419.06}, {"cat": "AIREACION", "nom": "Piedra Difusora Aireador Acuario Pecera 16 Cm Boyu Mineral", "costo": 1698.97}, {"cat": "AIREACION", "nom": "Piedra Difusora Boyu 16 Cm Aireador Acuario Pecera Porosa Azul", "costo": 1698.97}, {"cat": "AIREACION", "nom": "Piedra Pometina 2lts Hidroponia Rinde Para 4 Canastas N10 Gris 1 Cm 2.5 Cm", "costo": 1018.13}, {"cat": "ANTIPLAGAS Y FERTILIZANTES", "nom": "Antishock Fertifox 100g", "costo": 5424.31}, {"cat": "ANTIPLAGAS Y FERTILIZANTES", "nom": "Combo Fertifox Esquejes + Antishock + Tijera De Poda", "costo": 16377.57}, {"cat": "ANTIPLAGAS Y FERTILIZANTES", "nom": "Fertifox Fitorregulador Esquejes Crecimiento 75cc", "costo": 6911.52}, {"cat": "ANTIPLAGAS Y FERTILIZANTES", "nom": "Glacoxan Jabón Potásico Orgánico Ideal Para Cultivo 200cc", "costo": 6552.15}, {"cat": "ANTIPLAGAS Y FERTILIZANTES", "nom": "Insecticida Acaricida Orgánico Jabón Potásico Glacoxan®200cc", "costo": 6552.15}, {"cat": "ANTIPLAGAS Y FERTILIZANTES", "nom": "Insecticida Organico Jabon Potasico + Pulverizador 1000cc", "costo": 8693.15}, {"cat": "ANTIPLAGAS Y FERTILIZANTES", "nom": "Insecticida Organico Jabon Potasico + Pulverizador 500cc", "costo": 9446.59}, {"cat": "CONECTORES Y CAÑOS CARPAS", "nom": "Caño PVC 20mm x metro", "costo": 621.27}, {"cat": "CONECTORES Y CAÑOS CARPAS", "nom": "Conectores Para Carpas Indoor, Invernaderos De 20mm Blanco", "costo": 5205.75}, {"cat": "CONECTORES Y CAÑOS CARPAS", "nom": "Kit Conectores Esquineros Carpa Cultivo Indoor 16mm Completo Blanco", "costo": 6330.7}, {"cat": "HERRAMIENTAS", "nom": "4 En 1 Medidor Ph Ec Tds Temp Auto Calibración Hidroponia", "costo": 18442.89}, {"cat": "HERRAMIENTAS", "nom": "Anclas Ganchos Lst X10 Entrenamiento Plantas", "costo": 2016.85}, {"cat": "HERRAMIENTAS", "nom": "Combo Buffer Ph 3 Sobres 4.01 6.86 9.18 Calibracion Phmetro", "costo": 1989.12}, {"cat": "HERRAMIENTAS", "nom": "Combo Medidor Ph Autocalibre + Ec/tds + Termohigrometro Htc1 - Blanco", "costo": 16576.61}, {"cat": "HERRAMIENTAS", "nom": "Combo Pulverizador A Presion + Jabon Potasico Giber H- 1.5lt Celeste", "costo": 24957.94}, {"cat": "HERRAMIENTAS", "nom": "Cropers X 10 Unidades 3d Super Cropping Lst Cultivo", "costo": 1274.0}, {"cat": "HERRAMIENTAS", "nom": "Hydro Kit De Ciencia, Aprende A Cultivar Hidroponia", "costo": 2487.04}, {"cat": "HERRAMIENTAS", "nom": "Jeringas Para Dosificación De Sales Hidropónicas", "costo": 1463.71}, {"cat": "HERRAMIENTAS", "nom": "Medidor De Ph Automático + Medidor De Tds Hidroponia Blanco", "costo": 9788.49}, {"cat": "HERRAMIENTAS", "nom": "Medidor De Ph/tds/ph/ec/temperatura 4 En 1 Monitor De Agua Echo 9635", "costo": 18442.89}, {"cat": "HERRAMIENTAS", "nom": "Medidor Digital De Ph Hidroponía Autocalibrable", "costo": 5693.49}, {"cat": "HERRAMIENTAS", "nom": "Medidor Ec / Tds Electroconductividad Solidos Disueltos Ppm", "costo": 4095.0}, {"cat": "HERRAMIENTAS", "nom": "Monitor Medidor Ph, Ec, Tds, Temp, Sal, Sg 6 En 1 Wifi", "costo": 94021.54}, {"cat": "HERRAMIENTAS", "nom": "Prolongador Zapatilla 5 Tomas 3 Mts. Blanca Vr Plast Ind Arg Blanco", "costo": 6000.0}, {"cat": "HERRAMIENTAS", "nom": "Pulverizador A Presión Giber H- 1.5lts - Fumigador Color Azul", "costo": 18405.79}, {"cat": "HERRAMIENTAS", "nom": "Pulverizador Rociador Fumigador Jardín Plantas 2 Litros Color Naranja", "costo": 5000.0}, {"cat": "HERRAMIENTAS", "nom": "Pulverizador/rociador A Gatillo 1 Litro Multisprayer Giber Blanco", "costo": 2141.0}, {"cat": "HERRAMIENTAS", "nom": "Pulverizador/rociador A Presión Giber H- 1.5lts - Fumigador Celeste/amarillo", "costo": 18405.79}, {"cat": "HERRAMIENTAS", "nom": "Repuesto Electrodo Medidor De Ph 4 En 1 Blanco", "costo": 9320.0}, {"cat": "HERRAMIENTAS", "nom": "Rociador Pulverizador Spray 500cc Con Gatillo", "costo": 2894.44}, {"cat": "HERRAMIENTAS", "nom": "Rociador Pulverizador Spray 500cc Con Gatillo Blanco", "costo": 2894.44}, {"cat": "HERRAMIENTAS", "nom": "Temporizador Automático De Riego Para Jardín Canilla Verde", "costo": 27710.68}, {"cat": "HERRAMIENTAS", "nom": "Temporizador De Riego G3/4 Ip65 Pantalla Lcd Grande, Jardin Negro", "costo": 58947.55}, {"cat": "HERRAMIENTAS", "nom": "Termohigrometro Digital - Humedad, Temperatura Y Reloj", "costo": 4799.0}, {"cat": "HERRAMIENTAS", "nom": "Termohigrómetro Digital Duaitek Htc1 Medición Temperatura Humedad Reloj", "costo": 4799.0}, {"cat": "HERRAMIENTAS", "nom": "Tijera De Poda Punta Curva De Precisión De Acero De Calidad - Verde Lima", "costo": 4041.74}, {"cat": "HERRAMIENTAS", "nom": "Timer Programable Mecanico Enchufable Zurich Xtim3203", "costo": 6450.0}, {"cat": "HERRAMIENTAS", "nom": "Trasvasador De Liquidos Manual Con Manguera Nafta/liquidos", "costo": 6592.85}, {"cat": "KIT HIDROPONIA", "nom": "Aeroclonador Para 12 Esquejes Docogrow - Clonador", "costo": 33568.77}, {"cat": "KIT HIDROPONIA", "nom": "Balde Negro 20l Para Cultivo Hidropónico", "costo": 5858.4}, {"cat": "KIT HIDROPONIA", "nom": "Baldes X2 Hidroponia Dwc Cultivo 20l", "costo": 13406.71}, {"cat": "KIT HIDROPONIA", "nom": "Combo 4 Tapas Balde 20l, Canasta N10, Pometina Y Lana Roca", "costo": 9464.23}, {"cat": "KIT HIDROPONIA x 1 balde 20L", "nom": "Combo Hidroponia Kawsay Full Completo 20L", "costo": 95777.27}, {"cat": "KIT HIDROPONIA x 1 balde 10L", "nom": "Kit Cultivo Hidropónico Indoor Docogrow Balde 10l Bomba Aireadora", "costo": 13291.02}, {"cat": "KIT HIDROPONIA x 1 balde 20L", "nom": "Kit Cultivo Hidroponico 20l Con Nutrientes Dwc Inicial", "costo": 28963.03}, {"cat": "KIT HIDROPONIA x 1 balde 20L", "nom": "Kit Hidroponia Balde 20l Cultivo Indoor Hidroponico", "costo": 15528.6}, {"cat": "KIT HIDROPONIA x 1 balde 20L", "nom": "Kit Hidroponia Dwc Cultivo Maceta/balde 20l - Completo!", "costo": 47489.03}, {"cat": "KIT HIDROPONIA x 2 balde 10L", "nom": "Kit De Cultivo Hidroponico Balde 10l X 2 - Completo!", "costo": 49539.33}, {"cat": "KIT HIDROPONIA x 2 balde 20L", "nom": "Kit Hidroponia Dwc Cultivo Balde 20l X 2 - Completo!", "costo": 54208.83}, {"cat": "KIT HIDROPONIA x 2 balde 10L", "nom": "Kit Hidroponia Dwc 10l Kit Inicial Doble", "costo": 17578.89}, {"cat": "KIT HIDROPONIA x 2 balde 20L", "nom": "Kit Hidroponia Dwc 20l Kit Inicial Doble", "costo": 22248.39}, {"cat": "KIT HIDROPONIA x 2 balde 20L", "nom": "Kit Hidroponia Dwc Cultivo Balde 20l X 2 - Verdeagua", "costo": 55058.25}, {"cat": "KIT HIDROPONIA x 4 balde 10L", "nom": "Kit Cultivo Hidropónico Indoor X 4 Baldes 10l", "costo": 35157.79}, {"cat": "KIT HIDROPONIA x 4 balde 20L", "nom": "Kit Cultivo Hidroponico Indoor X 4 Baldes 20l", "costo": 44496.79}, {"cat": "KIT HIDROPONIA x 4 balde 20L", "nom": "Kit Cultivo Hidroponico Indoor X 4 Baldes 20l Aireador 4s", "costo": 59574.27}, {"cat": "KIT HIDROPONIA x 4 balde 20L", "nom": "Kit Hidroponia 4 Baldes 20l Con Nutrientes Medidor Ph 4 En 1", "costo": 91719.79}, {"cat": "KIT HIDROPONIA", "nom": "Kit Para Cultivo De Hidroponia Manguera Sopapas Aireador", "costo": 10965.38}, {"cat": "MACETAS", "nom": "10 Macetas Con Domo De Humedad Para Exterior Plantines Terracota Terracota Con Cupula", "costo": 7908.59}, {"cat": "MACETAS", "nom": "20 Macetas Con Domo De Humedad Para Exterior Plantines Terracota Pack De 20 Unidades", "costo": 15817.17}, {"cat": "MACETAS", "nom": "20 Macetas Con Domo De Humedad Para Exterior Plantines Terracota Pack De 20 Unidades Color : Terracota", "costo": 15817.17}, {"cat": "MACETAS", "nom": "Bandeja Germinación C/espuma Fenólica 345 Celdas", "costo": 8500.02}, {"cat": "MACETAS", "nom": "Bandejas Forrajeras Germinadoras 72 Celdas X 5 Unidades", "costo": 6249.85}, {"cat": "MACETAS", "nom": "Canasta Hidropónica N6 + Lana De Roca Combo 5 Unidades", "costo": 1275.0}, {"cat": "MACETAS", "nom": "Canastas Para Hidroponía Nro 6 X 30 Unidades", "costo": 5400.0}, {"cat": "MACETAS", "nom": "Combo Docogrow Kit Microgreens Para Siembra", "costo": 8924.17}, {"cat": "MACETAS", "nom": "Combo Kit Microgreens Para Siembra Más Pulverizador 500ml", "costo": 8924.17}, {"cat": "MACETAS", "nom": "Docogrow Kit Microgreens Para Siembra", "costo": 6029.73}, {"cat": "MACETAS", "nom": "Maceta Canasta Hidroponia Calada N10 (10 Cm) X 3 Unidades", "costo": 1950.0}, {"cat": "MACETAS", "nom": "Maceta Canasta N10", "costo": 650.0}, {"cat": "MACETAS", "nom": "Maceta Canasta N6", "costo": 180.0}, {"cat": "MACETAS", "nom": "Maceta Hidroponia N10 + Piedra Pometina + Lana De Roca X 4", "costo": 3316.3}, {"cat": "MACETAS", "nom": "Maceta Soplada 30l - Pack 5 Unidades - Cultivo/jardin - Negro - Soplada 30 Litros", "costo": 9849.9}, {"cat": "MACETAS", "nom": "Maceta Soplada 3l - Pack 10 Unidades - Cultivo/jardin Negro Soplada 3l", "costo": 2065.02}, {"cat": "MACETAS", "nom": "Maceta Soplada 5l - Pack 10 Unidades - Cultivo/jardin Negro Soplada 5l Pack", "costo": 4200.43}, {"cat": "MACETAS", "nom": "Maceta Soplada N10 - Pack 50 Unidades - Cultivo/jardin - Negro - N10 Soplada Negra", "costo": 1677.83}, {"cat": "MACETAS", "nom": "Maceta Soplada N12 - Pack 20 Unidades - Cultivo/jardin Negro N12 Soplada Negra Color : Negro", "costo": 973.84}, {"cat": "RIEGO", "nom": "10 Mts Caño De Polietileno 1 K4 Riego Negro Negro", "costo": 5033.56}, {"cat": "RIEGO", "nom": "10 Mts Caño De Polietileno 1/2 K4 Riego Negro", "costo": 1833.9}, {"cat": "RIEGO", "nom": "20 X Micro Aspersor Riego Hidroponia Aeroponia 180°", "costo": 1492.4}, {"cat": "RIEGO", "nom": "20 X Micro Aspersor Riego Hidroponia Aeroponia 360°", "costo": 746.2}, {"cat": "RIEGO", "nom": "20 X Micro Aspersor Riego Hidroponia Aeroponia 90°", "costo": 746.2}, {"cat": "RIEGO", "nom": "Acople Rápido Giber Con Stop Para Manguera 1/2 Pulgada Celeste/negro", "costo": 1372.0}, {"cat": "RIEGO", "nom": "Acquagarden Nutrientes Cultivo Hidropónicos 1l - Rinde 1000l", "costo": 30769.23}, {"cat": "RIEGO", "nom": "Adaptador Con Acople Rapido De Canilla A Microtubo Riego", "costo": 468.35}, {"cat": "RIEGO", "nom": "Adaptador Conector Canilla Rosca 3/4 A 1/2'' Giber - Riego Azul Petróleo", "costo": 588.06}, {"cat": "RIEGO", "nom": "Adaptador Conector Canilla 1'' A 3/4'' Riego", "costo": 602.58}, {"cat": "RIEGO", "nom": "Adaptador Doble Espiga Reducción 1 X 1/2 Polietileno Riego", "costo": 201.1}, {"cat": "RIEGO", "nom": "Adaptador Para Microtubo 4mm X 1/2 X 3, Riego, Jardin Negro", "costo": 1237.5}, {"cat": "RIEGO", "nom": "Adhesivo Pvc Tf3 110 Cc Para Caños Y Accesorios Blanco", "costo": 4108.38}, {"cat": "RIEGO", "nom": "Codo Union Espiga 1'' Conexion Caño Polietileno X 10un Riego Negro", "costo": 278.13}, {"cat": "RIEGO", "nom": "Combo 20 90/180/360 Microaspersores De Riego Más Punzon", "costo": 2394.06}, {"cat": "RIEGO", "nom": "Conector 1/2 Rosca Hembra A Espiga De 1/4 Microtubo X 3 U. Verde Musgo", "costo": 2623.02}, {"cat": "RIEGO", "nom": "Conector En Cruz 4 Salidas Riego Microtubo 4mm X20 Unidades Negro", "costo": 3149.2}, {"cat": "RIEGO", "nom": "Conector Espiga X Rosca M 1/2 X 5un Polietileno/riego Negro", "costo": 408.05}, {"cat": "RIEGO", "nom": "Conector Giber Canilla 3/4 Para Acople Rápido Gb-1878 Negro", "costo": 792.55}, {"cat": "RIEGO", "nom": "Conector Tee Espiga Triple 1'' Riego Caño Polietileno X 10 Negro", "costo": 3774.1}, {"cat": "RIEGO", "nom": "Conector Tee Espiga Triple 1/2 Riego Caño Polietileno X 10", "costo": 2247.0}, {"cat": "RIEGO", "nom": "Conectores Para Carpas Indoor, Invernaderos De 20mm - Blanco", "costo": 5205.75}, {"cat": "RIEGO", "nom": "Derivador Triple Canilla Rosca Hembra 4 Salidas C/llave Paso", "costo": 11111.0}, {"cat": "RIEGO", "nom": "Distribuidor 2 Vías C/llave Paso Con Acople Rápido Riego Verde", "costo": 2565.8}, {"cat": "RIEGO", "nom": "Estaca Con Gotero De Riego + Conector Tee Pack X 10 Negro", "costo": 2347.5}, {"cat": "RIEGO", "nom": "Estaca de riego para manguera 4x6mm", "costo": 136.03}, {"cat": "RIEGO", "nom": "Gotero con Estaca + Tee Pack de 10 unidades", "costo": 1750.65}, {"cat": "RIEGO", "nom": "Goteros Regulables Riego Por Goteo X20 Unidades + Punzon Rojo", "costo": 855.06}, {"cat": "RIEGO", "nom": "kit de Riego Jardin Full", "costo": 10435.02}, {"cat": "RIEGO", "nom": "Kit De Riego Para Jardin Full Mangueras K4 y Microtubo + 30 Goteros + Conectores", "costo": 7002.8}, {"cat": "RIEGO", "nom": "Kit De Riego Para Jardin Full Mangueras Y 30 Goteros", "costo": 9568.6}, {"cat": "RIEGO", "nom": "Kit De Riego X10 Para Jardín, Estacas Con Rociador/manguera", "costo": 6265.54}, {"cat": "RIEGO", "nom": "Llave De Paso Para Micro Riego Para Mangueras De 6mm Negro", "costo": 798.48}, {"cat": "RIEGO", "nom": "Pack 20 Conectores Para Caños 20mm Indoor/invernadero Blanco", "costo": 9200.0}, {"cat": "RIEGO", "nom": "Pack 20 Goteros Autocompensantes 2 L/H Riego/Jardin/Cultivos", "costo": 1710.0}, {"cat": "RIEGO", "nom": "Pack 20 Goteros Autocompensantes 4 L/H Riego/Jardin/Cultivos", "costo": 1321.4}, {"cat": "RIEGO", "nom": "Pack 20 Goteros Autocompensantes 8 L/H Riego/Jardin/Cultivos", "costo": 1321.4}, {"cat": "RIEGO", "nom": "Pack 30 Goteros Autocompensantes 2/4/8 L/H Riego/Jardin/Cultivos", "costo": 2331.86}, {"cat": "RIEGO", "nom": "Pack De 20 Conectores L Microtubo 4/7mm Riego/goteo/negro Negro", "costo": 1421.2}, {"cat": "RIEGO", "nom": "Pack De 20 Conectores T Microtubo 4/7mm Riego/goteo/negros Negro", "costo": 1974.4}, {"cat": "RIEGO", "nom": "Pack De 20 Conectores Union Microtubo 4/7mm Riego/goteo Negro", "costo": 272.0}, {"cat": "RIEGO", "nom": "Punzon 3.6 Mm Para Caño De Polietileno Para Fogger Y Gotero", "costo": 155.46}, {"cat": "RIEGO", "nom": "Tapon Micro Tubo 4/7 Mm Riego Pack 20 Unidades", "costo": 777.2}, {"cat": "RIEGO", "nom": "Union Espiga 1'' Conexion Caño Polietileno X 10un Riego Negro", "costo": 1500.0}, {"cat": "RIEGO", "nom": "Union Espiga Recta 1/2 Conexion Caño Polietileno X 10 Riego", "costo": 794.5}, {"cat": "RIEGO", "nom": "Valvula Esferica 1'' Paso Total Hh Duke + Conectores Riego", "costo": 4373.27}, {"cat": "RIEGO", "nom": "Kit Solución Nutritiva Cultivo Hidroponico Rinde 250l", "costo": 6877.83}, {"cat": "SALES", "nom": "Aquagarden Nutrientes Cultivo Hidropónicos 1l - Rinde 1000l", "costo": 30769.23}, {"cat": "SALES", "nom": "Fertilizando Hidroponia/Sustrato KAWSAY BASE A 1L", "costo": 17400.0}, {"cat": "SALES", "nom": "Fertilizando Hidroponia/Sustrato KAWSAY BASE B 1L", "costo": 17400.0}, {"cat": "SALES", "nom": "Kit Acqua Garden Solución A+b Nutritiva Cultivo Hidroponico", "costo": 15384.62}, {"cat": "SALES", "nom": "Kit Acqua Garden Solución A+b Nutritiva Cultivo Hidroponico", "costo": 15384.62}, {"cat": "SALES", "nom": "Kit De Reguladores De Ph Para Hidroponía", "costo": 8416.29}, {"cat": "SALES", "nom": "Kit Nutrientes Hidroponia Verdeagua Macro + Micro 1 Litro", "costo": 22118.0}, {"cat": "SALES", "nom": "Kit Nutrientes Hidroponia Verdeagua Macro + Micro 500ml", "costo": 15347.58}, {"cat": "SALES", "nom": "Kit Nutrientes Hidroponia Verdeagua Macro+bloom 1l", "costo": 22118.0}, {"cat": "SALES", "nom": "Kit Nutrientes Hidroponia Verdeagua Macro+micro+bloom 1l", "costo": 33177.0}, {"cat": "SALES", "nom": "Kit Nutrientes Hidroponia Verdeagua Macro+micro+bloom 500ml", "costo": 23021.37}, {"cat": "SALES", "nom": "Kit Nutrientes Hidroponia Verdeagua Macro+micro+bloom 500ml Tipo de envase : Botella", "costo": 23021.37}, {"cat": "SALES", "nom": "Kit Nutrientes Hidroponia Verdeagua Macro+micro+bloom Ahorro", "costo": 26406.58}, {"cat": "SALES", "nom": "Kit Solución Nutritiva A + B + C + D Acquagarden", "costo": 13755.66}, {"cat": "SALES", "nom": "Kit Solución Nutritiva A + B + C + D Acquagarden Hidroponia", "costo": 13755.66}, {"cat": "SALES", "nom": "Kit Solución Nutritiva Cultivo Hidroponico - Rinde 250l", "costo": 6877.83}, {"cat": "SALES", "nom": "Kit Solucion Nutritiva Hidroponía A B C Y D Acquagarden Mix", "costo": 26515.84}, {"cat": "SALES", "nom": "Kit Solucion Nutritiva Hidroponía A B C Y D Acquagarden Mix Tipo de envase : Botella", "costo": 26515.84}, {"cat": "SALES", "nom": "Kit Solución Nutritiva Macro, Micro Y Floración Hidroponía", "costo": 23076.92}, {"cat": "SALES", "nom": "Kit Solución Nutritiva Potenciador De Floración Hidroponia", "costo": 7692.31}, {"cat": "SALES", "nom": "Kit Solución Nutritiva Potenciador De Floración Hidroponia Tipo de envase : Botella", "costo": 7692.31}, {"cat": "SALES", "nom": "Nutriente Hidroponia Verdeagua Bloom 1l", "costo": 11059.0}, {"cat": "SALES", "nom": "Nutrientes Hidroponía Acqua Garden 250ml Regular Ph+medición", "costo": 33949.56}, {"cat": "SALES", "nom": "Nutrientes Hidroponía Acquagarden 1litro Regular Ph+medición", "costo": 48974.01}, {"cat": "SALES", "nom": "Nutrientes Hidroponia Verdeagua 1litro Regular Ph+medicion", "costo": 51381.78}, {"cat": "SALES", "nom": "Nutrientes Hidroponia Verdeagua 1litro Regular Ph+medicion Tipo de envase : 500ml", "costo": 51381.78}, {"cat": "SALES", "nom": "Nutrientes Hidroponía Verdeagua 500ml + Medidor Ph Y Ec&tds", "costo": 32809.86}, {"cat": "SALES", "nom": "Nutrientes Hidroponia Verdeagua 500ml Regular Ph+medición", "costo": 41226.15}, {"cat": "SALES", "nom": "Regulador De Ph Más Para Hidroponía", "costo": 3438.91}, {"cat": "SALES", "nom": "Regulador De Ph Menos Para Hidroponía", "costo": 4977.38}, {"cat": "SALES", "nom": "Solución Nutritiva A Acquagarden 1l", "costo": 7692.31}, {"cat": "SALES", "nom": "Solución Nutritiva A Acquagarden 250ml", "costo": 3438.91}, {"cat": "SALES", "nom": "Solución Nutritiva B Acquagarden 1l", "costo": 7692.31}, {"cat": "SALES", "nom": "Solución Nutritiva B Acquagarden 250ml", "costo": 3438.91}, {"cat": "SALES", "nom": "Solución Nutritiva Bloom Verdeagua 1l", "costo": 11059.0}, {"cat": "SALES", "nom": "Solución Nutritiva Bloom Verdeagua 500ml", "costo": 7673.79}, {"cat": "SALES", "nom": "Solución Nutritiva C Acquagarden 1l", "costo": 7692.31}, {"cat": "SALES", "nom": "Solución Nutritiva C Acquagarden 250ml", "costo": 3438.91}, {"cat": "SALES", "nom": "Solución Nutritiva D Acquagarden 1l", "costo": 7692.31}, {"cat": "SALES", "nom": "Solución Nutritiva D Acquagarden 250ml", "costo": 3438.91}, {"cat": "SALES", "nom": "Solucion Nutritiva Hidroponia+medidor 4 En 1 Ph/tds/temp/ec", "costo": 38625.72}, {"cat": "SALES", "nom": "Solución Nutritiva Macro Verdeagua 1l", "costo": 11059.0}, {"cat": "SALES", "nom": "Solución Nutritiva Macro Verdeagua 500ml", "costo": 7673.79}, {"cat": "SALES", "nom": "Solución Nutritiva Micro Verdeagua 1l", "costo": 11059.0}, {"cat": "SALES", "nom": "Solución Nutritiva Micro Verdeagua 500ml", "costo": 7673.79}, {"cat": "SUSTRATOS", "nom": "Bolsa pometina 400grs", "costo": 416.3}, {"cat": "SUSTRATOS", "nom": "Combo Espuma Fenólica Y Semillas Cultivo Hidroponía", "costo": 2582.47}, {"cat": "SUSTRATOS", "nom": "Combo Espuma Fenólica, Semillas Y Bandeja Cultivo Hidroponía", "costo": 6245.47}, {"cat": "SUSTRATOS", "nom": "Cubo de Lana de Roca", "costo": 75.0}, {"cat": "SUSTRATOS", "nom": "Lana De Roca Mineral Pack X 10 Cubos 5 X 5 X 5 Cm Hidroponía", "costo": 750.0}, {"cat": "SUSTRATOS", "nom": "Plancha Espuma Fenólica Seicho 2x2x2cm Hidroponía 345 Cubos Pelletizadas : Multisemilllas", "costo": 3000.02}, {"cat": "SUSTRATOS", "nom": "Plancha Espuma Fenólica Seicho 2x2x2cm Hidroponía 345 Cubos Pelletizadas : Peletizadas", "costo": 3000.02}, {"cat": "SUSTRATOS", "nom": "Regalo Cubo Lana de Roca x 2", "costo": 166.44}, {"cat": "SUSTRATOS", "nom": "Sustrato Musgo Sphagnum + Perlita 10lts - Hidroponia Y Otros", "costo": 1960.2}, {"cat": "CANASTAS", "nom": "Canastas Para Hidroponía Nro 6 X 100 Unidades", "costo": 18000.0}, {"cat": "SUSTRATOS", "nom": "Lana De Roca Mineral Pack X 100 Cubos 5 X 5 X 5 Cm Hidroponía", "costo": 7500.0}, {"cat": "RIEGO", "nom": "Pack 30 Goteros Autocompensados 2/4/8 L/h Riego/cultivos Negro", "costo": 2348.3}, {"cat": "RIEGO", "nom": "10 Mts Caño De Polietileno 1/2 K4 Riego Negro Negro", "costo": 1833.94}, {"cat": "MACETAS", "nom": "Maceta Soplada 10l - Pack 5 Unidades - Cultivo/jardin Negro Soplada 10l", "costo": 3296.99}, {"cat": "AIREACION", "nom": "Potente Aireador Pecera Rs 290 Económico 1 Salida", "costo": 6376.37}, {"cat": "HERRAMIENTAS", "nom": "Lupa X 2 Unidades 75mm Y 50mm Excelentes Oferta", "costo": 2063.5}, {"cat": "HERRAMIENTAS", "nom": "Termohigrometro Digital - Humedad, Temperatura Y Reloj - Htc1", "costo": 9598.0}, {"cat": "KIT HIDROPONIA", "nom": "Kit Hidroponia Dwc Cultivo Balde 10l X 2 - Completo!", "costo": 49539.33}, {"cat": "MACETAS", "nom": "Canastas Para Hidroponía Nro 6", "costo": 180.0}, {"cat": "AIREACION", "nom": "Piedra difusora 5cm", "costo": 419.06}, {"cat": "AIREACION", "nom": "Manguera negra 1mt 4x6mm", "costo": 161.99}, {"cat": "KIT HIDROPONIA", "nom": "Sistema Hidropónico DWC 20 Litros Completo x 2 - Kit de Cultivo Indoor para Principiantes y Avanzados", "costo": 54208.83}];
+let calcResults = [];
+
 // ── Estado global ──────────────────────────────────────────────────────────────
 let mlItems = [];
 let tnItems = [];
 let links   = {};
 let cfg     = { usePromo: true, threshold: 0 };
-let sortSt  = { comp: { k: null, d: 1 }, ml: { k: null, d: 1 }, tn: { k: null, d: 1 } };
+let sortSt  = { comp: { k: null, d: 1 }, ml: { k: null, d: 1 }, tn: { k: null, d: 1 }, calc: { k: null, d: 1 } };
 
 // ── Token ──────────────────────────────────────────────────────────────────────
 function getToken() {
@@ -456,7 +577,7 @@ function refreshTokenStatus() {
 
 // ── Navegación ─────────────────────────────────────────────────────────────────
 function goPage(p) {
-  ['comparison','ml','tn','config'].forEach(function(id) {
+  ['comparison','ml','tn','calc','config'].forEach(function(id) {
     const pg = document.getElementById('page-' + id);
     const nb = document.getElementById('nav-' + id);
     if (pg) pg.classList.toggle('active', id === p);
@@ -964,6 +1085,212 @@ function exportCSV() {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────────
+// ── Calculadora de precios ────────────────────────────────────────────────────
+function getCalcParams() {
+  return {
+    op:  parseFloat(document.getElementById('cp-op').value)  || 0,
+    ml:  parseFloat(document.getElementById('cp-ml').value)  || 0,
+    env: parseFloat(document.getElementById('cp-env').value) || 0,
+    imp: parseFloat(document.getElementById('cp-imp').value) || 0,
+    tn:  parseFloat(document.getElementById('cp-tn').value)  || 0,
+    gan: parseFloat(document.getElementById('cp-gan').value) || 0,
+  };
+}
+
+function calcPrecioPublicacion(costo, p) {
+  // Fórmula: Precio = Costo / (1 - totalCostos/100 - ganancia/100)
+  // donde totalCostos = suma de todos los % de costos (excepto ganancia)
+  // Esto asegura que al restar todos los % del precio, quede la ganancia esperada
+  var totalDescuentos = (p.op + p.ml + p.env + p.imp) / 100;
+  var ganancia = p.gan / 100;
+  var divisor = 1 - totalDescuentos - ganancia;
+  if (divisor <= 0) return null; // parámetros inválidos
+  return costo / divisor;
+}
+
+function calcPrecioTN(costo, p) {
+  var totalDescuentos = (p.op + p.tn + p.imp) / 100;
+  var ganancia = p.gan / 100;
+  var divisor = 1 - totalDescuentos - ganancia;
+  if (divisor <= 0) return null;
+  return costo / divisor;
+}
+
+function calcPrecios() {
+  var p = getCalcParams();
+  var totalML = p.op + p.ml + p.env + p.imp;
+  var totalTN = p.op + p.tn + p.imp;
+
+  // Mostrar fórmula descriptiva
+  var desc = document.getElementById('calc-formula-desc');
+  if (desc) desc.textContent = 'ML: costos ' + totalML.toFixed(1) + '% + ganancia ' + p.gan.toFixed(1) + '% | TN: costos ' + totalTN.toFixed(1) + '% + ganancia ' + p.gan.toFixed(1) + '%';
+
+  // Calcular resultados
+  calcResults = preciosData.map(function(prod) {
+    var precioML = calcPrecioPublicacion(prod.costo, p);
+    var precioTN = calcPrecioTN(prod.costo, p);
+    var costoOp = prod.costo * p.op  / 100;
+    var comML   = precioML ? precioML * p.ml  / 100 : 0;
+    var envio   = precioML ? precioML * p.env / 100 : 0;
+    var imp     = precioML ? precioML * p.imp / 100 : 0;
+    var comTN   = precioTN ? precioTN * p.tn  / 100 : 0;
+    var ganML   = precioML ? precioML * p.gan / 100 : 0;
+    return {
+      cat:      prod.cat,
+      nom:      prod.nom,
+      costo:    prod.costo,
+      costoOp:  costoOp,
+      comML:    comML,
+      envio:    envio,
+      imp:      imp,
+      comTN:    comTN,
+      ganancia: ganML,
+      precioML: precioML,
+      precioTN: precioTN,
+    };
+  });
+
+  // Guardar parámetros
+  try { localStorage.setItem('calc_params', JSON.stringify(p)); } catch(e) {}
+
+  // Poblar filtro de categorías
+  var catSel = document.getElementById('calc-f-cat');
+  if (catSel) {
+    var cats = ['all'].concat([...new Set(preciosData.map(function(p) { return p.cat; }))].sort());
+    catSel.innerHTML = cats.map(function(c) {
+      return '<option value="' + c + '">' + (c === 'all' ? 'Todas las categorías' : c) + '</option>';
+    }).join('');
+  }
+
+  renderCalc();
+}
+
+function renderCalc() {
+  var tbody = document.getElementById('tbody-calc');
+  if (!calcResults.length) {
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>';
+    return;
+  }
+
+  var q    = document.getElementById('calc-f-q')   ? document.getElementById('calc-f-q').value.toLowerCase()   : '';
+  var cat  = document.getElementById('calc-f-cat') ? document.getElementById('calc-f-cat').value : 'all';
+
+  var filtered = calcResults.filter(function(r) {
+    if (cat !== 'all' && r.cat !== cat) return false;
+    if (q && !r.nom.toLowerCase().includes(q) && !r.cat.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  // Sort
+  var st = sortSt.calc;
+  if (st && st.k) {
+    filtered = filtered.slice().sort(function(a, b) {
+      var va = a[st.k], vb = b[st.k];
+      if (typeof va === 'string') return st.d * va.localeCompare(vb);
+      return st.d * ((va || 0) - (vb || 0));
+    });
+  }
+
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="11"><div class="empty">Sin resultados</div></td></tr>'; return; }
+
+  function fmt(n) { return n != null ? '$' + Math.round(n).toLocaleString('es-AR') : '—'; }
+
+  tbody.innerHTML = filtered.map(function(r) {
+    var precioMLOk = r.precioML != null;
+    return '<tr>' +
+      '<td><span style="font-size:11px;color:var(--muted);">' + r.cat + '</span></td>' +
+      '<td><div class="prod-name" style="font-size:13px;">' + r.nom + '</div></td>' +
+      '<td><span class="price">$' + Math.round(r.costo).toLocaleString('es-AR') + '</span></td>' +
+      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--muted);">' + fmt(r.costoOp) + '</span></td>' +
+      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--muted);">' + fmt(r.comML) + '</span></td>' +
+      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--muted);">' + fmt(r.envio) + '</span></td>' +
+      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--muted);">' + fmt(r.imp) + '</span></td>' +
+      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--muted);">' + fmt(r.comTN) + '</span></td>' +
+      '<td><span style="font-family:var(--mono);font-size:12px;color:var(--green);">' + fmt(r.ganancia) + '</span></td>' +
+      '<td><span class="price" style="' + (precioMLOk ? 'color:var(--ml);font-weight:600;' : 'color:var(--red);') + '">' + fmt(r.precioML) + '</span></td>' +
+      '<td><span class="price" style="' + (r.precioTN != null ? 'color:var(--tn);font-weight:600;' : 'color:var(--red);') + '">' + fmt(r.precioTN) + '</span></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function exportCalcCSV() {
+  if (!calcResults.length) { alert('Primero calculá los precios'); return; }
+  var rows = [['Categoría','Producto','Costo c/IVA','Costos Op (A)','Com ML (B)','Envío (C)','Impuestos (D)','Com TN (E)','Ganancia (F)','Precio ML','Precio TN']];
+  calcResults.forEach(function(r) {
+    rows.push([r.cat, r.nom, Math.round(r.costo), Math.round(r.costoOp), Math.round(r.comML),
+      Math.round(r.envio), Math.round(r.imp), Math.round(r.comTN), Math.round(r.ganancia),
+      r.precioML ? Math.round(r.precioML) : '', r.precioTN ? Math.round(r.precioTN) : '']);
+  });
+  var csv = rows.map(function(r) { return r.map(function(c) { return '"' + String(c).replace(/"/g,'""') + '"'; }).join(','); }).join('\r\n');
+  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'precios_optimos_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ── Import Excel de precios ────────────────────────────────────────────────────
+function onExcelDrop(ev) {
+  ev.preventDefault();
+  var f = ev.dataTransfer && ev.dataTransfer.files[0];
+  if (f) processExcel(f);
+}
+function onExcelSelect(ev) {
+  var f = ev.target && ev.target.files[0];
+  if (f) processExcel(f);
+}
+
+function processExcel(file) {
+  var res  = document.getElementById('el-excel-result');
+  var alrt = document.getElementById('el-excel-cfg-alert');
+  var lbl  = document.getElementById('el-excel-drop-label');
+  if (res)  res.innerHTML = '<div style="color:var(--muted);padding:6px 0;">⏳ Procesando ' + file.name + '...</div>';
+
+  // Leer como ArrayBuffer para parsear xlsx con SheetJS (cargado desde CDN)
+  var reader = new FileReader();
+  reader.onload = function(ev2) {
+    try {
+      var data = new Uint8Array(ev2.target.result);
+      var workbook = XLSX.read(data, { type: 'array' });
+      var sheet = workbook.Sheets[workbook.SheetNames[0]];
+      var rows  = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      // Detectar columnas flexiblemente
+      var sample = rows[0] || {};
+      var keys = Object.keys(sample);
+      var kCat  = keys.find(function(k) { return k.toUpperCase().includes('CATEG'); }) || keys[0];
+      var kProd = keys.find(function(k) { return k.toUpperCase().includes('PROD'); }) || keys[1];
+      var kCost = keys.find(function(k) { return k.toUpperCase().includes('COSTO'); }) || keys[2];
+
+      var nuevos = [];
+      rows.forEach(function(r) {
+        var nom   = String(r[kProd] || '').trim();
+        var costo = parseFloat(String(r[kCost] || '').replace(/[^0-9.,]/g,'').replace(',','.')) || 0;
+        if (nom && costo > 0) {
+          nuevos.push({ cat: String(r[kCat] || 'SIN CATEGORÍA').trim(), nom: nom, costo: costo });
+        }
+      });
+
+      if (nuevos.length === 0) {
+        if (res) res.innerHTML = '<div class="alert a-warn">⚠ No se encontraron productos. Verificá que tenga columnas CATEGORIA, PRODUCTO, COSTO C/IVA.</div>';
+        return;
+      }
+
+      preciosData = nuevos;
+      calcResults = []; // resetear cálculos
+      document.getElementById('tbody-calc').innerHTML = '<tr><td colspan="11"><div class="empty">Datos actualizados. Hacé clic en Calcular.</div></td></tr>';
+
+      var msg = '✓ ' + nuevos.length + ' productos cargados desde ' + file.name;
+      if (res)  res.innerHTML  = '<div class="alert a-ok" style="margin-top:4px;">' + msg + '</div>';
+      if (alrt) { alrt.className = 'alert a-ok'; alrt.textContent = msg; }
+      if (lbl)  lbl.textContent = '✓ ' + file.name;
+    } catch(err) {
+      if (res) res.innerHTML = '<div class="alert a-warn">⚠ Error al leer el Excel: ' + err.message + '. Asegurate que sea un archivo .xlsx válido.</div>';
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 document.getElementById('el-date').textContent = new Date().toLocaleDateString('es-AR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
 
 // Cargar config y TN desde localStorage
@@ -995,6 +1322,19 @@ if (tnItems.length > 0) {
 
 renderAll();
 refreshTokenStatus();
+// Restaurar parámetros de calculadora
+try {
+  var _cp = localStorage.getItem('calc_params');
+  if (_cp) {
+    var cp = JSON.parse(_cp);
+    if (cp.op  != null) document.getElementById('cp-op').value  = cp.op;
+    if (cp.ml  != null) document.getElementById('cp-ml').value  = cp.ml;
+    if (cp.env != null) document.getElementById('cp-env').value = cp.env;
+    if (cp.imp != null) document.getElementById('cp-imp').value = cp.imp;
+    if (cp.tn  != null) document.getElementById('cp-tn').value  = cp.tn;
+    if (cp.gan != null) document.getElementById('cp-gan').value = cp.gan;
+  }
+} catch(e) {}
 setInterval(refreshTokenStatus, 60000);
 </script>
 </body>
