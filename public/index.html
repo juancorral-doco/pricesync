@@ -344,10 +344,10 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
             <th class="sort" onclick="doSort('calc','costo')"><span id="cas-costo">COSTO C/IVA</span></th>
             <th class="sort" onclick="doSort('calc','precioML')"><span id="cas-precioML">PRECIO ML</span></th>
             <th class="sort" onclick="doSort('calc','ganML')"><span id="cas-ganML">GANANCIA ML $</span></th>
-            <th class="sort" onclick="doSort('calc','ganMLpct')"><span id="cas-ganMLpct">GANANCIA ML %</span></th>
+            <th class="sort" onclick="doSort('calc','ganMLpct')"><span id="cas-ganMLpct">GANANCIA ML % (s/vta)</span></th>
             <th class="sort" onclick="doSort('calc','precioTN')"><span id="cas-precioTN">PRECIO TN</span></th>
             <th class="sort" onclick="doSort('calc','ganTN')"><span id="cas-ganTN">GANANCIA TN $</span></th>
-            <th class="sort" onclick="doSort('calc','ganTNpct')"><span id="cas-ganTNpct">GANANCIA TN %</span></th>
+            <th class="sort" onclick="doSort('calc','ganTNpct')"><span id="cas-ganTNpct">GANANCIA TN % (s/vta)</span></th>
           </tr></thead>
           <tbody id="tbody-calc">
             <tr><td colspan="9"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>
@@ -1134,8 +1134,9 @@ function calcPrecios() {
     // Simplificado: ganancia = precio * ganancia%
     var ganMLval  = precioML ? precioML * p.gan / 100 : 0;
     var ganTNval  = precioTN ? precioTN * p.gan / 100 : 0;
-    var ganMLpct  = precioML ? (ganMLval / prod.costo * 100) : 0;
-    var ganTNpct  = precioTN ? (ganTNval / prod.costo * 100) : 0;
+    // % sobre precio de venta = lo que el usuario ingresó en el campo F
+    var ganMLpct  = precioML ? (ganMLval / precioML * 100) : 0;
+    var ganTNpct  = precioTN ? (ganTNval / precioTN * 100) : 0;
     return {
       cat:      prod.cat,
       nom:      prod.nom,
@@ -1204,10 +1205,10 @@ function renderCalc() {
       '<td><span class="price">$' + Math.round(r.costo).toLocaleString('es-AR') + '</span></td>' +
       '<td><span class="price" style="color:var(--ml);font-weight:600;">' + fmt(r.precioML) + '</span></td>' +
       '<td><span style="font-family:var(--mono);font-size:13px;' + ganMLColor + '">' + fmt(r.ganML) + '</span></td>' +
-      '<td><span class="badge ' + (r.ganMLpct >= 20 ? 'b-ok' : 'b-diff') + '">' + fmtPct(r.ganMLpct) + '</span></td>' +
+      '<td><span class="badge b-ok">' + fmtPct(r.ganMLpct) + '</span></td>' +
       '<td><span class="price" style="color:var(--tn);font-weight:600;">' + fmt(r.precioTN) + '</span></td>' +
       '<td><span style="font-family:var(--mono);font-size:13px;' + ganTNColor + '">' + fmt(r.ganTN) + '</span></td>' +
-      '<td><span class="badge ' + (r.ganTNpct >= 20 ? 'b-ok' : 'b-diff') + '">' + fmtPct(r.ganTNpct) + '</span></td>' +
+      '<td><span class="badge b-ok">' + fmtPct(r.ganTNpct) + '</span></td>' +
       '</tr>';
   }).join('');
 }
