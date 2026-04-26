@@ -345,11 +345,11 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
             <th class="sort" onclick="doSort('calc','precioML')"><span id="cas-precioML">PRECIO ML</span></th>
             <th>PRECIO ACTUAL ML</th>
             <th class="sort" onclick="doSort('calc','ganML')"><span id="cas-ganML">GANANCIA ML $</span></th>
-            <th class="sort" onclick="doSort('calc','ganMLpct')"><span id="cas-ganMLpct">GANANCIA ML %</span></th>
+            <th class="sort" onclick="doSort('calc','ganMLpct')"><span id="cas-ganMLpct">GANANCIA ML % (s/costo)</span></th>
             <th class="sort" onclick="doSort('calc','precioTN')"><span id="cas-precioTN">PRECIO TN</span></th>
             <th>PRECIO ACTUAL TN</th>
             <th class="sort" onclick="doSort('calc','ganTN')"><span id="cas-ganTN">GANANCIA TN $</span></th>
-            <th class="sort" onclick="doSort('calc','ganTNpct')"><span id="cas-ganTNpct">GANANCIA TN %</span></th>
+            <th class="sort" onclick="doSort('calc','ganTNpct')"><span id="cas-ganTNpct">GANANCIA TN % (s/costo)</span></th>
           </tr></thead>
           <tbody id="tbody-calc">
             <tr><td colspan="11"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>
@@ -1098,20 +1098,22 @@ function getCalcParams() {
 }
 
 function calcPrecioPublicacion(costo, p) {
-  // Todos los % se aplican sobre el PRECIO DE VENTA:
-  // A (Op) + B (Com ML) + C (Envio) + D (Impuestos) + F (Ganancia)
-  // Precio ML = Costo / (1 - A% - B% - C% - D% - F%)
-  var divisor = 1 - (p.op + p.ml + p.env + p.imp + p.gan) / 100;
+  // Ganancia F% sobre el COSTO (recupera inversión + margen)
+  // A, B, C, D se descuentan del precio de venta (lo que se llevan terceros)
+  // Lo que necesito recibir = Costo × (1 + F/100)
+  // Precio ML = Costo × (1 + F%) / (1 - A% - B% - C% - D%)
+  var necesito = costo * (1 + p.gan / 100);
+  var divisor  = 1 - (p.op + p.ml + p.env + p.imp) / 100;
   if (divisor <= 0) return null;
-  return costo / divisor;
+  return necesito / divisor;
 }
 
 function calcPrecioTN(costo, p) {
-  // A (Op) + E (Com TN) + D (Impuestos) + F (Ganancia) sobre el PRECIO DE VENTA
-  // Precio TN = Costo / (1 - A% - E% - D% - F%)
-  var divisor = 1 - (p.op + p.tn + p.imp + p.gan) / 100;
+  // Precio TN = Costo × (1 + F%) / (1 - A% - C% - D% - E%)
+  var necesito = costo * (1 + p.gan / 100);
+  var divisor  = 1 - (p.op + p.env + p.imp + p.tn) / 100;
   if (divisor <= 0) return null;
-  return costo / divisor;
+  return necesito / divisor;
 }
 
 function calcPrecios() {
@@ -1121,22 +1123,19 @@ function calcPrecios() {
 
   // Mostrar fórmula descriptiva
   var desc = document.getElementById('calc-formula-desc');
-  if (desc) desc.textContent = 'ML: Costo / (1 - ' + (p.op+p.ml+p.env+p.imp+p.gan).toFixed(1) + '%)  |  TN: Costo / (1 - ' + (p.op+p.tn+p.imp+p.gan).toFixed(1) + '%)';
+  if (desc) desc.textContent = 'ML: Costo×' + (1+p.gan/100).toFixed(2) + ' / (1-' + (p.op+p.ml+p.env+p.imp).toFixed(1) + '%)  |  TN: Costo×' + (1+p.gan/100).toFixed(2) + ' / (1-' + (p.op+p.env+p.imp+p.tn).toFixed(1) + '%)';
 
   // Calcular resultados
   calcResults = preciosData.map(function(prod) {
     var precioML = calcPrecioPublicacion(prod.costo, p);
     var precioTN = calcPrecioTN(prod.costo, p);
-    // Ganancia real = precio de venta - costo - todos los costos sobre el precio
-    var costosTotalesML = precioML ? precioML * (p.op/100 + p.ml/100 + p.env/100 + p.imp/100) : 0;
-    var costosTotalesTN = precioTN ? precioTN * (p.op/100 + p.tn/100 + p.imp/100) : 0;
-    var ganML    = precioML ? precioML - prod.costo - costosTotalesML + prod.costo * p.op/100 : 0;
-    // Simplificado: ganancia = precio * ganancia%
-    var ganMLval  = precioML ? precioML * p.gan / 100 : 0;
-    var ganTNval  = precioTN ? precioTN * p.gan / 100 : 0;
-    // % sobre precio de venta = lo que el usuario ingresó en el campo F
-    var ganMLpct  = precioML ? (ganMLval / precioML * 100) : 0;
-    var ganTNpct  = precioTN ? (ganTNval / precioTN * 100) : 0;
+    // Ganancia = lo que recibo neto (precio - descuentos de terceros) - costo
+    // = Costo × F% (por diseño de la fórmula)
+    var ganMLval  = prod.costo * p.gan / 100;
+    var ganTNval  = prod.costo * p.gan / 100;
+    // % sobre el costo (lo que el usuario ingresó en F)
+    var ganMLpct  = p.gan;
+    var ganTNpct  = p.gan;
     // Cruzar precio actual de ML por nombre (case-insensitive, match parcial)
     var nomLow = prod.nom.toLowerCase().trim();
     var matchML = mlItems.find(function(ml) {
