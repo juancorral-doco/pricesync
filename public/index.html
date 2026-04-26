@@ -1098,20 +1098,18 @@ function getCalcParams() {
 }
 
 function calcPrecioPublicacion(costo, p) {
-  // Fórmula: Precio = Costo / (1 - totalCostos/100 - ganancia/100)
-  // donde totalCostos = suma de todos los % de costos (excepto ganancia)
-  // Esto asegura que al restar todos los % del precio, quede la ganancia esperada
-  var totalDescuentos = (p.op + p.ml + p.env + p.imp) / 100;
-  var ganancia = p.gan / 100;
-  var divisor = 1 - totalDescuentos - ganancia;
-  if (divisor <= 0) return null; // parámetros inválidos
+  // Todos los % se aplican sobre el PRECIO DE VENTA:
+  // A (Op) + B (Com ML) + C (Envio) + D (Impuestos) + F (Ganancia)
+  // Precio ML = Costo / (1 - A% - B% - C% - D% - F%)
+  var divisor = 1 - (p.op + p.ml + p.env + p.imp + p.gan) / 100;
+  if (divisor <= 0) return null;
   return costo / divisor;
 }
 
 function calcPrecioTN(costo, p) {
-  var totalDescuentos = (p.op + p.tn + p.imp) / 100;
-  var ganancia = p.gan / 100;
-  var divisor = 1 - totalDescuentos - ganancia;
+  // A (Op) + E (Com TN) + D (Impuestos) + F (Ganancia) sobre el PRECIO DE VENTA
+  // Precio TN = Costo / (1 - A% - E% - D% - F%)
+  var divisor = 1 - (p.op + p.tn + p.imp + p.gan) / 100;
   if (divisor <= 0) return null;
   return costo / divisor;
 }
@@ -1123,7 +1121,7 @@ function calcPrecios() {
 
   // Mostrar fórmula descriptiva
   var desc = document.getElementById('calc-formula-desc');
-  if (desc) desc.textContent = 'ML: costos ' + totalML.toFixed(1) + '% + ganancia ' + p.gan.toFixed(1) + '% | TN: costos ' + totalTN.toFixed(1) + '% + ganancia ' + p.gan.toFixed(1) + '%';
+  if (desc) desc.textContent = 'ML: Costo / (1 - ' + (p.op+p.ml+p.env+p.imp+p.gan).toFixed(1) + '%)  |  TN: Costo / (1 - ' + (p.op+p.tn+p.imp+p.gan).toFixed(1) + '%)';
 
   // Calcular resultados
   calcResults = preciosData.map(function(prod) {
