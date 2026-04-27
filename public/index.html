@@ -334,10 +334,10 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
         </select>
         <select class="f-select" id="calc-f-alert" onchange="renderCalc()">
           <option value="all">ML y TN — todos</option>
-          <option value="ml-red">ML — precio muy distante (>5%)</option>
-          <option value="ml-green">ML — precio cercano (≤5%)</option>
-          <option value="tn-red">TN — precio muy distante (>5%)</option>
-          <option value="tn-green">TN — precio cercano (≤5%)</option>
+          <option value="ml-red">🔴 ML — por debajo del óptimo (&lt;-5%)</option>
+          <option value="ml-green">🟢 ML — igual o sobre el óptimo (&gt;-5%)</option>
+          <option value="tn-red">🔴 TN — por debajo del óptimo (&lt;-5%)</option>
+          <option value="tn-green">🟢 TN — igual o sobre el óptimo (&gt;-5%)</option>
         </select>
         <input class="f-input" type="text" id="calc-f-q" placeholder="Buscar producto..." oninput="renderCalc()">
       </div>
@@ -1204,13 +1204,20 @@ function calcPrecios() {
 
 function alertCell(pct) {
   if (pct === null || pct === undefined) return '<span style="color:var(--muted);font-size:12px;">—</span>';
-  var absPct = Math.abs(pct);
-  var isOk   = absPct <= 5;
-  var icon   = isOk ? '●' : '●';
-  var color  = isOk ? 'var(--green)' : 'var(--red)';
-  var label  = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+  // pct = (actual - óptimo) / óptimo * 100
+  // positivo y > 5%  → actual > óptimo → cobrás más → VERDE
+  // negativo o <= 5% → actual <= óptimo o diferencia chica → ROJO
+  // Entre -5% y +5%  → dentro del margen → VERDE (cercano)
+  var isOk  = pct >= 5 || (pct >= -5 && pct < 5);
+  // Lógica simplificada:
+  // Verde: pct > 5 (cobrás bastante más que el óptimo — bien)
+  //        o Math.abs(pct) <= 5 (estás cerca — aceptable)
+  // Rojo:  pct < -5 (cobrás bastante menos que el óptimo — perdés margen)
+  isOk = pct > -5; // rojo solo cuando estás más de 5% por debajo del óptimo
+  var color = isOk ? 'var(--green)' : 'var(--red)';
+  var label = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
   return '<div style="text-align:center;">' +
-    '<span style="font-size:18px;color:' + color + ';">' + icon + '</span>' +
+    '<span style="font-size:18px;color:' + color + ';">●</span>' +
     '<div style="font-size:10px;color:' + color + ';margin-top:2px;">' + label + '</div>' +
     '</div>';
 }
@@ -1229,10 +1236,10 @@ function renderCalc() {
   var filtered = calcResults.filter(function(r) {
     if (cat !== 'all' && r.cat !== cat) return false;
     if (q && !r.nom.toLowerCase().includes(q) && !r.cat.toLowerCase().includes(q)) return false;
-    if (alertF === 'ml-red')   return r.diffMLpct !== null && Math.abs(r.diffMLpct) > 5;
-    if (alertF === 'ml-green') return r.diffMLpct !== null && Math.abs(r.diffMLpct) <= 5;
-    if (alertF === 'tn-red')   return r.diffTNpct !== null && Math.abs(r.diffTNpct) > 5;
-    if (alertF === 'tn-green') return r.diffTNpct !== null && Math.abs(r.diffTNpct) <= 5;
+    if (alertF === 'ml-red')   return r.diffMLpct !== null && r.diffMLpct <= -5;
+    if (alertF === 'ml-green') return r.diffMLpct !== null && r.diffMLpct > -5;
+    if (alertF === 'tn-red')   return r.diffTNpct !== null && r.diffTNpct <= -5;
+    if (alertF === 'tn-green') return r.diffTNpct !== null && r.diffTNpct > -5;
     return true;
   });
 
