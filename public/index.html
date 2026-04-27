@@ -332,6 +332,13 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
         <select class="f-select" id="calc-f-cat" onchange="renderCalc()">
           <option value="all">Todas las categorías</option>
         </select>
+        <select class="f-select" id="calc-f-alert" onchange="renderCalc()">
+          <option value="all">ML y TN — todos</option>
+          <option value="ml-red">ML — precio muy distante (>5%)</option>
+          <option value="ml-green">ML — precio cercano (≤5%)</option>
+          <option value="tn-red">TN — precio muy distante (>5%)</option>
+          <option value="tn-green">TN — precio cercano (≤5%)</option>
+        </select>
         <input class="f-input" type="text" id="calc-f-q" placeholder="Buscar producto..." oninput="renderCalc()">
       </div>
 
@@ -345,14 +352,16 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
             <th class="sort" onclick="doSort('calc','precioML')"><span id="cas-precioML">PRECIO ML</span></th>
             <th>PRECIO ACTUAL ML</th>
             <th class="sort" onclick="doSort('calc','ganML')"><span id="cas-ganML">GANANCIA ML $</span></th>
-            <th class="sort" onclick="doSort('calc','ganMLpct')"><span id="cas-ganMLpct">GANANCIA ML % (s/costo)</span></th>
+            <th class="sort" onclick="doSort('calc','ganMLpct')"><span id="cas-ganMLpct">GANANCIA ML %</span></th>
+            <th class="sort" onclick="doSort('calc','diffMLpct')"><span id="cas-diffMLpct">ALERTA ML</span></th>
             <th class="sort" onclick="doSort('calc','precioTN')"><span id="cas-precioTN">PRECIO TN</span></th>
             <th>PRECIO ACTUAL TN</th>
             <th class="sort" onclick="doSort('calc','ganTN')"><span id="cas-ganTN">GANANCIA TN $</span></th>
-            <th class="sort" onclick="doSort('calc','ganTNpct')"><span id="cas-ganTNpct">GANANCIA TN % (s/costo)</span></th>
+            <th class="sort" onclick="doSort('calc','ganTNpct')"><span id="cas-ganTNpct">GANANCIA TN %</span></th>
+            <th class="sort" onclick="doSort('calc','diffTNpct')"><span id="cas-diffTNpct">ALERTA TN</span></th>
           </tr></thead>
           <tbody id="tbody-calc">
-            <tr><td colspan="11"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>
+            <tr><td colspan="13"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -1154,20 +1163,27 @@ function calcPrecios() {
     var actTNPrice = matchTN ? (matchTN.promoPrice || matchTN.price) : null;
     var actTNHasPromo = matchTN && !!matchTN.promoPrice;
 
+    // % diferencia entre precio actual y precio óptimo
+    // positivo = actual más alto que óptimo, negativo = actual más bajo
+    var diffMLpct = (actMLPrice && precioML) ? ((actMLPrice - precioML) / precioML * 100) : null;
+    var diffTNpct = (actTNPrice && precioTN) ? ((actTNPrice - precioTN) / precioTN * 100) : null;
+
     return {
-      cat:         prod.cat,
-      nom:         prod.nom,
-      costo:       prod.costo,
-      precioML:    precioML,
-      precioTN:    precioTN,
-      ganML:       ganMLval,
-      ganMLpct:    ganMLpct,
-      ganTN:       ganTNval,
-      ganTNpct:    ganTNpct,
-      actMLPrice:  actMLPrice,
+      cat:          prod.cat,
+      nom:          prod.nom,
+      costo:        prod.costo,
+      precioML:     precioML,
+      precioTN:     precioTN,
+      ganML:        ganMLval,
+      ganMLpct:     ganMLpct,
+      ganTN:        ganTNval,
+      ganTNpct:     ganTNpct,
+      actMLPrice:   actMLPrice,
       actMLHasPromo: actMLHasPromo,
-      actTNPrice:  actTNPrice,
+      actTNPrice:   actTNPrice,
       actTNHasPromo: actTNHasPromo,
+      diffMLpct:    diffMLpct,
+      diffTNpct:    diffTNpct,
     };
   });
 
@@ -1186,19 +1202,37 @@ function calcPrecios() {
   renderCalc();
 }
 
+function alertCell(pct) {
+  if (pct === null || pct === undefined) return '<span style="color:var(--muted);font-size:12px;">—</span>';
+  var absPct = Math.abs(pct);
+  var isOk   = absPct <= 5;
+  var icon   = isOk ? '●' : '●';
+  var color  = isOk ? 'var(--green)' : 'var(--red)';
+  var label  = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+  return '<div style="text-align:center;">' +
+    '<span style="font-size:18px;color:' + color + ';">' + icon + '</span>' +
+    '<div style="font-size:10px;color:' + color + ';margin-top:2px;">' + label + '</div>' +
+    '</div>';
+}
+
 function renderCalc() {
   var tbody = document.getElementById('tbody-calc');
   if (!calcResults.length) {
-    tbody.innerHTML = '<tr><td colspan="11"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>';
     return;
   }
 
-  var q    = document.getElementById('calc-f-q')   ? document.getElementById('calc-f-q').value.toLowerCase()   : '';
-  var cat  = document.getElementById('calc-f-cat') ? document.getElementById('calc-f-cat').value : 'all';
+  var q      = document.getElementById('calc-f-q')     ? document.getElementById('calc-f-q').value.toLowerCase()     : '';
+  var cat    = document.getElementById('calc-f-cat')   ? document.getElementById('calc-f-cat').value   : 'all';
+  var alertF = document.getElementById('calc-f-alert') ? document.getElementById('calc-f-alert').value : 'all';
 
   var filtered = calcResults.filter(function(r) {
     if (cat !== 'all' && r.cat !== cat) return false;
     if (q && !r.nom.toLowerCase().includes(q) && !r.cat.toLowerCase().includes(q)) return false;
+    if (alertF === 'ml-red')   return r.diffMLpct !== null && Math.abs(r.diffMLpct) > 5;
+    if (alertF === 'ml-green') return r.diffMLpct !== null && Math.abs(r.diffMLpct) <= 5;
+    if (alertF === 'tn-red')   return r.diffTNpct !== null && Math.abs(r.diffTNpct) > 5;
+    if (alertF === 'tn-green') return r.diffTNpct !== null && Math.abs(r.diffTNpct) <= 5;
     return true;
   });
 
@@ -1207,12 +1241,14 @@ function renderCalc() {
   if (st && st.k) {
     filtered = filtered.slice().sort(function(a, b) {
       var va = a[st.k], vb = b[st.k];
+      if (va === null || va === undefined) va = -Infinity;
+      if (vb === null || vb === undefined) vb = -Infinity;
       if (typeof va === 'string') return st.d * va.localeCompare(vb);
-      return st.d * ((va || 0) - (vb || 0));
+      return st.d * (va - vb);
     });
   }
 
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="11"><div class="empty">Sin resultados</div></td></tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="13"><div class="empty">Sin resultados</div></td></tr>'; return; }
 
   function fmt(n) { return n != null ? '$' + Math.round(n).toLocaleString('es-AR') : '—'; }
   function fmtPct(n) { return n != null ? n.toFixed(1) + '%' : '—'; }
@@ -1247,20 +1283,14 @@ function renderCalc() {
       '<td><span class="price">$' + Math.round(r.costo).toLocaleString('es-AR') + '</span></td>' +
       '<td><span class="price" style="color:var(--ml);font-weight:600;">' + fmt(r.precioML) + '</span></td>' +
       '<td>' + actMLCell + '</td>' +
-      '<td>' +
-        '<span style="font-family:var(--mono);font-size:13px;' + ganMLColor + '">' + fmt(r.ganML) + '</span>' +
-        (r.actMLPrice ? '<div style="font-size:10px;margin-top:3px;color:var(--red);">' +
-          'vs precio actual: ' + fmt(r.ganML - r.actMLPrice) + '</div>' : '') +
-      '</td>' +
+      '<td><span style="font-family:var(--mono);font-size:13px;' + ganMLColor + '">' + fmt(r.ganML) + '</span></td>' +
       '<td><span class="badge b-ok">' + fmtPct(r.ganMLpct) + '</span></td>' +
+      '<td>' + alertCell(r.diffMLpct) + '</td>' +
       '<td><span class="price" style="color:var(--tn);font-weight:600;">' + fmt(r.precioTN) + '</span></td>' +
       '<td>' + actTNCell + '</td>' +
-      '<td>' +
-        '<span style="font-family:var(--mono);font-size:13px;' + ganTNColor + '">' + fmt(r.ganTN) + '</span>' +
-        (r.actTNPrice ? '<div style="font-size:10px;margin-top:3px;color:var(--red);">' +
-          'vs precio actual: ' + fmt(r.ganTN - r.actTNPrice) + '</div>' : '') +
-      '</td>' +
+      '<td><span style="font-family:var(--mono);font-size:13px;' + ganTNColor + '">' + fmt(r.ganTN) + '</span></td>' +
       '<td><span class="badge b-ok">' + fmtPct(r.ganTNpct) + '</span></td>' +
+      '<td>' + alertCell(r.diffTNpct) + '</td>' +
       '</tr>';
   }).join('');
 }
