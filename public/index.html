@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Price Sync — ML × TN</title>
+<title>Control de Precios DocoGrow</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -123,7 +123,7 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
 <div class="topbar">
   <div class="logo">
     <div class="logo-dot"></div>
-    PRICE SYNC <span style="font-size:11px;color:var(--muted);margin-left:4px;">ML × TN</span>
+    DocoGrow <span style="font-size:11px;color:var(--muted);margin-left:4px;">Control de Precios</span>
   </div>
   <div class="topbar-right">
     <span class="date-chip" id="el-date"></span>
@@ -670,7 +670,10 @@ function processCSV(file) {
   };
   reader.onload = function(ev2) {
     try {
-      var items = parseTN(ev2.target.result);
+      // Decodificar latin-1 correctamente con TextDecoder
+      var decoder = new TextDecoder('windows-1252');
+      var text = decoder.decode(ev2.target.result);
+      var items = parseTN(text);
       if (items.length === 0) {
         if (res)  res.innerHTML = '<div class="alert a-warn">⚠ No se encontraron productos. Verificá que sea el CSV de TN (separador ;).</div>';
         if (alrt) { alrt.className = 'alert a-warn'; alrt.textContent = '⚠ No se encontraron productos.'; }
@@ -696,7 +699,7 @@ function processCSV(file) {
       if (res) res.innerHTML = '<div class="alert a-warn">⚠ Error al procesar: ' + err.message + '</div>';
     }
   };
-  reader.readAsText(file, 'latin-1');
+  reader.readAsArrayBuffer(file);
 }
 
 // ── Links ML↔TN ───────────────────────────────────────────────────────────────
@@ -1244,11 +1247,19 @@ function renderCalc() {
       '<td><span class="price">$' + Math.round(r.costo).toLocaleString('es-AR') + '</span></td>' +
       '<td><span class="price" style="color:var(--ml);font-weight:600;">' + fmt(r.precioML) + '</span></td>' +
       '<td>' + actMLCell + '</td>' +
-      '<td><span style="font-family:var(--mono);font-size:13px;' + ganMLColor + '">' + fmt(r.ganML) + '</span></td>' +
+      '<td>' +
+        '<span style="font-family:var(--mono);font-size:13px;' + ganMLColor + '">' + fmt(r.ganML) + '</span>' +
+        (r.actMLPrice && r.precioML ? '<div style="font-size:10px;margin-top:3px;' + (r.actMLPrice - r.precioML >= 0 ? 'color:var(--green)' : 'color:var(--red)') + ';">' +
+          (r.actMLPrice - r.precioML >= 0 ? '+' : '') + fmt(r.actMLPrice - r.precioML) + ' vs óptimo</div>' : '') +
+      '</td>' +
       '<td><span class="badge b-ok">' + fmtPct(r.ganMLpct) + '</span></td>' +
       '<td><span class="price" style="color:var(--tn);font-weight:600;">' + fmt(r.precioTN) + '</span></td>' +
       '<td>' + actTNCell + '</td>' +
-      '<td><span style="font-family:var(--mono);font-size:13px;' + ganTNColor + '">' + fmt(r.ganTN) + '</span></td>' +
+      '<td>' +
+        '<span style="font-family:var(--mono);font-size:13px;' + ganTNColor + '">' + fmt(r.ganTN) + '</span>' +
+        (r.actTNPrice && r.precioTN ? '<div style="font-size:10px;margin-top:3px;' + (r.actTNPrice - r.precioTN >= 0 ? 'color:var(--green)' : 'color:var(--red)') + ';">' +
+          (r.actTNPrice - r.precioTN >= 0 ? '+' : '') + fmt(r.actTNPrice - r.precioTN) + ' vs óptimo</div>' : '') +
+      '</td>' +
       '<td><span class="badge b-ok">' + fmtPct(r.ganTNpct) + '</span></td>' +
       '</tr>';
   }).join('');
