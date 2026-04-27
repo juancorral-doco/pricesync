@@ -1249,16 +1249,16 @@ function renderCalc() {
       '<td>' + actMLCell + '</td>' +
       '<td>' +
         '<span style="font-family:var(--mono);font-size:13px;' + ganMLColor + '">' + fmt(r.ganML) + '</span>' +
-        (r.actMLPrice && r.precioML ? '<div style="font-size:10px;margin-top:3px;' + (r.actMLPrice - r.precioML >= 0 ? 'color:var(--green)' : 'color:var(--red)') + ';">' +
-          (r.actMLPrice - r.precioML >= 0 ? '+' : '') + fmt(r.actMLPrice - r.precioML) + ' vs óptimo</div>' : '') +
+        (r.actMLPrice ? '<div style="font-size:10px;margin-top:3px;color:var(--red);">' +
+          'vs precio actual: ' + fmt(r.ganML - r.actMLPrice) + '</div>' : '') +
       '</td>' +
       '<td><span class="badge b-ok">' + fmtPct(r.ganMLpct) + '</span></td>' +
       '<td><span class="price" style="color:var(--tn);font-weight:600;">' + fmt(r.precioTN) + '</span></td>' +
       '<td>' + actTNCell + '</td>' +
       '<td>' +
         '<span style="font-family:var(--mono);font-size:13px;' + ganTNColor + '">' + fmt(r.ganTN) + '</span>' +
-        (r.actTNPrice && r.precioTN ? '<div style="font-size:10px;margin-top:3px;' + (r.actTNPrice - r.precioTN >= 0 ? 'color:var(--green)' : 'color:var(--red)') + ';">' +
-          (r.actTNPrice - r.precioTN >= 0 ? '+' : '') + fmt(r.actTNPrice - r.precioTN) + ' vs óptimo</div>' : '') +
+        (r.actTNPrice ? '<div style="font-size:10px;margin-top:3px;color:var(--red);">' +
+          'vs precio actual: ' + fmt(r.ganTN - r.actTNPrice) + '</div>' : '') +
       '</td>' +
       '<td><span class="badge b-ok">' + fmtPct(r.ganTNpct) + '</span></td>' +
       '</tr>';
