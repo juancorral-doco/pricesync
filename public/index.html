@@ -150,6 +150,9 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
     <button class="nav-item" id="nav-calc" onclick="goPage('calc')">
       <span class="nav-dot" style="background:var(--green);"></span> Calculá tu Precio Óptimo
     </button>
+    <button class="nav-item" id="nav-analisis" onclick="goPage('analisis')">
+      <span class="nav-dot" style="background:var(--amber);"></span> Análisis de Ganancia
+    </button>
     <button class="nav-item" id="nav-config" onclick="goPage('config')">
       <span class="nav-dot" style="background:var(--muted);"></span> Configuración
     </button>
@@ -339,6 +342,12 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
           <option value="tn-red">🔴 TN — por debajo del óptimo (&lt;-5%)</option>
           <option value="tn-green">🟢 TN — igual o sobre el óptimo (&gt;-5%)</option>
         </select>
+        <select class="f-select" id="calc-f-status" onchange="renderCalc()">
+          <option value="all">Todos los estados</option>
+          <option value="ml-active">Solo activos en ML</option>
+          <option value="tn-visible">Solo visibles en TN</option>
+          <option value="both">Activos ML y visibles TN</option>
+        </select>
         <input class="f-input" type="text" id="calc-f-q" placeholder="Buscar producto..." oninput="renderCalc()">
       </div>
 
@@ -362,6 +371,55 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
           </tr></thead>
           <tbody id="tbody-calc">
             <tr><td colspan="13"><div class="empty">Ingresá los parámetros y hacé clic en Calcular</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── ANÁLISIS DE GANANCIA ── -->
+    <div class="page" id="page-analisis">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Análisis de Ganancia Real</div>
+          <div class="page-sub">Ganancia real sobre precios publicados actualmente en ML y TN</div>
+        </div>
+        <button class="export-btn" onclick="exportAnalisis()">↓ Exportar CSV</button>
+      </div>
+
+      <div class="filters">
+        <select class="f-select" id="an-f-status" onchange="renderAnalisis()">
+          <option value="all">Todos</option>
+          <option value="ml-active">Activos en ML</option>
+          <option value="tn-visible">Visibles en TN</option>
+          <option value="both">Activos ML y visibles TN</option>
+        </select>
+        <select class="f-select" id="an-f-gan" onchange="renderAnalisis()">
+          <option value="all">Toda ganancia</option>
+          <option value="positive">Ganancia positiva</option>
+          <option value="negative">Ganancia negativa</option>
+          <option value="gt20">Ganancia ML &gt; 20%</option>
+          <option value="lt10">Ganancia ML &lt; 10%</option>
+        </select>
+        <input class="f-input" type="text" id="an-f-q" placeholder="Buscar por título..." oninput="renderAnalisis()">
+      </div>
+
+      <div id="an-alert" class="alert a-info">Sincronizá ML e importá el CSV de TN para ver el análisis. Los parámetros A, B, C, D, E se toman de Calculá tu Precio Óptimo.</div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th class="sort" onclick="doSort('an','title')"><span id="ans-title">PRODUCTO</span></th>
+            <th class="sort" onclick="doSort('an','statusML')"><span id="ans-statusML">ESTADO ML</span></th>
+            <th class="sort" onclick="doSort('an','statusTN')"><span id="ans-statusTN">ESTADO TN</span></th>
+            <th class="sort" onclick="doSort('an','precioML')"><span id="ans-precioML">PRECIO ACT. ML</span></th>
+            <th class="sort" onclick="doSort('an','ganMLpct')"><span id="ans-ganMLpct">GANANCIA ML %</span></th>
+            <th class="sort" onclick="doSort('an','ganML')"><span id="ans-ganML">GANANCIA ML $</span></th>
+            <th class="sort" onclick="doSort('an','precioTN')"><span id="ans-precioTN">PRECIO ACT. TN</span></th>
+            <th class="sort" onclick="doSort('an','ganTNpct')"><span id="ans-ganTNpct">GANANCIA TN %</span></th>
+            <th class="sort" onclick="doSort('an','ganTN')"><span id="ans-ganTN">GANANCIA TN $</span></th>
+          </tr></thead>
+          <tbody id="tbody-an">
+            <tr><td colspan="9"><div class="empty">Sin datos — sincronizá ML e importá TN</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -506,7 +564,7 @@ let mlItems = [];
 let tnItems = [];
 let links   = {};
 let cfg     = { usePromo: true, threshold: 0 };
-let sortSt  = { comp: { k: null, d: 1 }, ml: { k: null, d: 1 }, tn: { k: null, d: 1 }, calc: { k: null, d: 1 } };
+let sortSt  = { comp: { k: null, d: 1 }, ml: { k: null, d: 1 }, tn: { k: null, d: 1 }, calc: { k: null, d: 1 }, an: { k: null, d: 1 } };
 
 // ── Token ──────────────────────────────────────────────────────────────────────
 function getToken() {
@@ -586,7 +644,7 @@ function refreshTokenStatus() {
 
 // ── Navegación ─────────────────────────────────────────────────────────────────
 function goPage(p) {
-  ['comparison','ml','tn','calc','config'].forEach(function(id) {
+  ['comparison','ml','tn','calc','analisis','config'].forEach(function(id) {
     const pg = document.getElementById('page-' + id);
     const nb = document.getElementById('nav-' + id);
     if (pg) pg.classList.toggle('active', id === p);
@@ -851,7 +909,7 @@ function doSort(table, key) {
   var st = sortSt[table];
   st.d = st.k === key ? st.d * -1 : 1; st.k = key;
   // Actualizar headers
-  var pfx = table === 'comp' ? 'cs' : table === 'ml' ? 'ms' : 'ts';
+  var pfx = table === 'comp' ? 'cs' : table === 'ml' ? 'ms' : table === 'tn' ? 'ts' : table === 'an' ? 'ans' : 'cas';
   document.querySelectorAll('[id^="' + pfx + '-"]').forEach(function(el) {
     el.parentElement.classList.remove('asc','desc');
   });
@@ -1063,7 +1121,7 @@ function renderTN() {
 }
 
 // ── Render All ─────────────────────────────────────────────────────────────────
-function renderAll() { renderComparison(); renderML(); renderTN(); }
+function renderAll() { renderComparison(); renderML(); renderTN(); if (mlItems.length || tnItems.length) renderAnalisis(); }
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 function saveConfig() {
@@ -1164,26 +1222,32 @@ function calcPrecios() {
     var actTNHasPromo = matchTN && !!matchTN.promoPrice;
 
     // % diferencia entre precio actual y precio óptimo
-    // positivo = actual más alto que óptimo, negativo = actual más bajo
     var diffMLpct = (actMLPrice && precioML) ? ((actMLPrice - precioML) / precioML * 100) : null;
     var diffTNpct = (actTNPrice && precioTN) ? ((actTNPrice - precioTN) / precioTN * 100) : null;
+    // Estado del match en ML y TN
+    var mlStatus  = matchML ? matchML.status : null;
+    var tnVisible = matchTN ? matchTN.visible : null;
 
     return {
-      cat:          prod.cat,
-      nom:          prod.nom,
-      costo:        prod.costo,
-      precioML:     precioML,
-      precioTN:     precioTN,
-      ganML:        ganMLval,
-      ganMLpct:     ganMLpct,
-      ganTN:        ganTNval,
-      ganTNpct:     ganTNpct,
-      actMLPrice:   actMLPrice,
+      cat:           prod.cat,
+      nom:           prod.nom,
+      costo:         prod.costo,
+      precioML:      precioML,
+      precioTN:      precioTN,
+      ganML:         ganMLval,
+      ganMLpct:      ganMLpct,
+      ganTN:         ganTNval,
+      ganTNpct:      ganTNpct,
+      actMLPrice:    actMLPrice,
       actMLHasPromo: actMLHasPromo,
-      actTNPrice:   actTNPrice,
+      actTNPrice:    actTNPrice,
       actTNHasPromo: actTNHasPromo,
-      diffMLpct:    diffMLpct,
-      diffTNpct:    diffTNpct,
+      diffMLpct:     diffMLpct,
+      diffTNpct:     diffTNpct,
+      mlStatus:      mlStatus,
+      tnVisible:     tnVisible,
+      matchML:       matchML,
+      matchTN:       matchTN,
     };
   });
 
@@ -1229,9 +1293,10 @@ function renderCalc() {
     return;
   }
 
-  var q      = document.getElementById('calc-f-q')     ? document.getElementById('calc-f-q').value.toLowerCase()     : '';
-  var cat    = document.getElementById('calc-f-cat')   ? document.getElementById('calc-f-cat').value   : 'all';
-  var alertF = document.getElementById('calc-f-alert') ? document.getElementById('calc-f-alert').value : 'all';
+  var q       = document.getElementById('calc-f-q')      ? document.getElementById('calc-f-q').value.toLowerCase()      : '';
+  var cat     = document.getElementById('calc-f-cat')    ? document.getElementById('calc-f-cat').value    : 'all';
+  var alertF  = document.getElementById('calc-f-alert')  ? document.getElementById('calc-f-alert').value  : 'all';
+  var statusF = document.getElementById('calc-f-status') ? document.getElementById('calc-f-status').value : 'all';
 
   var filtered = calcResults.filter(function(r) {
     if (cat !== 'all' && r.cat !== cat) return false;
@@ -1240,6 +1305,9 @@ function renderCalc() {
     if (alertF === 'ml-green') return r.diffMLpct !== null && r.diffMLpct > -5;
     if (alertF === 'tn-red')   return r.diffTNpct !== null && r.diffTNpct <= -5;
     if (alertF === 'tn-green') return r.diffTNpct !== null && r.diffTNpct > -5;
+    if (statusF === 'ml-active')  return r.mlStatus === 'active';
+    if (statusF === 'tn-visible') return r.tnVisible === true;
+    if (statusF === 'both')       return r.mlStatus === 'active' && r.tnVisible === true;
     return true;
   });
 
@@ -1386,6 +1454,183 @@ function processExcel(file) {
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+// ── Análisis de Ganancia Real ─────────────────────────────────────────────────
+// Calcula ganancia real basada en precios actuales publicados
+// usando los parámetros A,B,C,D,E del área de calculadora
+
+function getGananciaReal(precioVenta, costo, p, plataforma) {
+  // Ganancia real = precio × (1 - costos%) - costo
+  if (!precioVenta || !costo) return null;
+  var descuentos;
+  if (plataforma === 'ml') {
+    descuentos = (p.op + p.ml + p.env + p.imp) / 100;
+  } else {
+    descuentos = (p.op + p.env + p.imp + p.tn) / 100;
+  }
+  var neto = precioVenta * (1 - descuentos);
+  return neto - costo;
+}
+
+function buildAnalisisData() {
+  var p = getCalcParams();
+  var rows = [];
+
+  // Combinar ML y TN: iterar sobre mlItems y cruzar con tnItems por SKU/nombre
+  var tnBySkuName = {};
+  tnItems.forEach(function(tn) {
+    var s = (tn.sku || '').toLowerCase().trim();
+    var n = tn.name.toLowerCase().trim();
+    if (s) tnBySkuName[s] = tn;
+    if (n) tnBySkuName[n] = tn;
+  });
+
+  // Usar mlItems como base y cruzar con TN
+  var seen = {};
+  mlItems.forEach(function(ml) {
+    var baseTitle = ml.title.split(' — ')[0];
+    var key = ml.id + (ml.variationId ? '_' + ml.variationId : '');
+    if (seen[key]) return;
+    seen[key] = true;
+
+    var effML = (cfg.usePromo && ml.promoPrice) ? ml.promoPrice : ml.price;
+
+    // Buscar en TN
+    var tnKey = (ml.sku || '').toLowerCase().trim() || baseTitle.toLowerCase().trim();
+    var tn = tnBySkuName[tnKey] || null;
+    var effTN = tn ? (tn.promoPrice || tn.price) : null;
+
+    // Buscar costo en preciosData por nombre
+    var nomLow = baseTitle.toLowerCase().trim();
+    var prodCosto = preciosData.find(function(pd) {
+      return pd.nom.toLowerCase().trim() === nomLow ||
+             nomLow.includes(pd.nom.toLowerCase().trim()) ||
+             pd.nom.toLowerCase().trim().includes(nomLow);
+    });
+    var costo = prodCosto ? prodCosto.costo : null;
+
+    var ganMLval = costo ? getGananciaReal(effML, costo, p, 'ml') : null;
+    var ganMLpct = (ganMLval !== null && costo) ? (ganMLval / costo * 100) : null;
+    var ganTNval = (costo && effTN) ? getGananciaReal(effTN, costo, p, 'tn') : null;
+    var ganTNpct = (ganTNval !== null && costo) ? (ganTNval / costo * 100) : null;
+
+    rows.push({
+      title:     baseTitle,
+      variante:  ml.variationId ? ml.title.replace(baseTitle, '').replace(' — ', '') : '',
+      statusML:  ml.status,
+      statusTN:  tn ? (tn.visible ? 'visible' : 'oculto') : '—',
+      tnVisible: tn ? tn.visible : null,
+      precioML:  effML,
+      precioTN:  effTN,
+      costo:     costo,
+      ganML:     ganMLval,
+      ganMLpct:  ganMLpct,
+      ganTN:     ganTNval,
+      ganTNpct:  ganTNpct,
+    });
+  });
+
+  return rows;
+}
+
+function renderAnalisis() {
+  var tbody   = document.getElementById('tbody-an');
+  var alertEl = document.getElementById('an-alert');
+  var q       = document.getElementById('an-f-q')      ? document.getElementById('an-f-q').value.toLowerCase()      : '';
+  var statusF = document.getElementById('an-f-status') ? document.getElementById('an-f-status').value : 'all';
+  var ganF    = document.getElementById('an-f-gan')    ? document.getElementById('an-f-gan').value    : 'all';
+
+  if (!mlItems.length && !tnItems.length) {
+    if (alertEl) { alertEl.className = 'alert a-warn'; alertEl.textContent = 'Sin datos — sincronizá ML e importá el CSV de TN.'; }
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty">Sin datos</div></td></tr>';
+    return;
+  }
+
+  var data = buildAnalisisData();
+
+  var filtered = data.filter(function(r) {
+    if (q && !r.title.toLowerCase().includes(q)) return false;
+    if (statusF === 'ml-active')  return r.statusML === 'active';
+    if (statusF === 'tn-visible') return r.tnVisible === true;
+    if (statusF === 'both')       return r.statusML === 'active' && r.tnVisible === true;
+    if (ganF === 'positive') return r.ganMLpct !== null && r.ganMLpct > 0;
+    if (ganF === 'negative') return r.ganMLpct !== null && r.ganMLpct <= 0;
+    if (ganF === 'gt20')     return r.ganMLpct !== null && r.ganMLpct > 20;
+    if (ganF === 'lt10')     return r.ganMLpct !== null && r.ganMLpct < 10;
+    return true;
+  });
+
+  // Sort
+  var st = sortSt.an;
+  if (st && st.k) {
+    filtered = filtered.slice().sort(function(a, b) {
+      var va = a[st.k], vb = b[st.k];
+      if (va === null || va === undefined) va = -Infinity;
+      if (vb === null || vb === undefined) vb = -Infinity;
+      if (typeof va === 'string') return st.d * va.localeCompare(vb);
+      return st.d * (va - vb);
+    });
+  }
+
+  if (alertEl) { alertEl.className = 'alert a-ok'; alertEl.textContent = filtered.length + ' productos · Parámetros: A=' + getCalcParams().op + '% B=' + getCalcParams().ml + '% C=' + getCalcParams().env + '% D=' + getCalcParams().imp + '% E=' + getCalcParams().tn + '%'; }
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty">Sin resultados con los filtros aplicados</div></td></tr>';
+    return;
+  }
+
+  function fmt(n) { return n !== null && n !== undefined ? '$' + Math.round(n).toLocaleString('es-AR') : '—'; }
+  function fmtPct(n) { return n !== null && n !== undefined ? n.toFixed(1) + '%' : '—'; }
+  function ganBadge(pct) {
+    if (pct === null || pct === undefined) return '<span style="color:var(--muted)">—</span>';
+    var color = pct >= 20 ? 'b-ok' : pct >= 0 ? 'b-promo' : 'b-diff';
+    return '<span class="badge ' + color + '">' + fmtPct(pct) + '</span>';
+  }
+
+  tbody.innerHTML = filtered.map(function(r) {
+    var mlBadge = '<span class="badge ' + (r.statusML === 'active' ? 'b-ok' : 'b-none') + '">' + (r.statusML || '—') + '</span>';
+    var tnBadge = r.tnVisible === null ? '<span style="color:var(--muted)">—</span>'
+      : '<span class="badge ' + (r.tnVisible ? 'b-ok' : 'b-none') + '">' + (r.tnVisible ? 'Visible' : 'Oculto') + '</span>';
+
+    return '<tr>' +
+      '<td><div class="prod-name">' + r.title + '</div>' +
+        (r.variante ? '<div class="prod-sub">' + r.variante + '</div>' : '') +
+        (!r.costo ? '<div class="prod-sub" style="color:var(--amber);">Sin costo cargado</div>' : '') +
+      '</td>' +
+      '<td>' + mlBadge + '</td>' +
+      '<td>' + tnBadge + '</td>' +
+      '<td>' +
+        (r.precioML ? '<span class="price" style="color:var(--ml);font-weight:600;">$' + Math.round(r.precioML).toLocaleString('es-AR') + '</span>' : '<span style="color:var(--muted)">—</span>') +
+      '</td>' +
+      '<td>' + ganBadge(r.ganMLpct) + '</td>' +
+      '<td><span style="font-family:var(--mono);font-size:13px;color:' + (r.ganML > 0 ? 'var(--green)' : 'var(--red)') + ';">' + fmt(r.ganML) + '</span></td>' +
+      '<td>' +
+        (r.precioTN ? '<span class="price" style="color:var(--tn);font-weight:600;">$' + Math.round(r.precioTN).toLocaleString('es-AR') + '</span>' : '<span style="color:var(--muted)">—</span>') +
+      '</td>' +
+      '<td>' + ganBadge(r.ganTNpct) + '</td>' +
+      '<td><span style="font-family:var(--mono);font-size:13px;color:' + (r.ganTN > 0 ? 'var(--green)' : r.ganTN < 0 ? 'var(--red)' : 'var(--muted)') + ';">' + fmt(r.ganTN) + '</span></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function exportAnalisis() {
+  var data = buildAnalisisData();
+  var rows = [['Producto','Variante','Estado ML','Estado TN','Precio ML','Ganancia ML %','Ganancia ML $','Precio TN','Ganancia TN %','Ganancia TN $']];
+  data.forEach(function(r) {
+    rows.push([r.title, r.variante, r.statusML, r.statusTN,
+      r.precioML ? Math.round(r.precioML) : '',
+      r.ganMLpct !== null ? r.ganMLpct.toFixed(1)+'%' : '',
+      r.ganML !== null ? Math.round(r.ganML) : '',
+      r.precioTN ? Math.round(r.precioTN) : '',
+      r.ganTNpct !== null ? r.ganTNpct.toFixed(1)+'%' : '',
+      r.ganTN !== null ? Math.round(r.ganTN) : '']);
+  });
+  var csv  = rows.map(function(r) { return r.map(function(c) { return '"' + String(c).replace(/"/g,'""') + '"'; }).join(','); }).join('\r\n');
+  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'analisis_ganancia_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
 document.getElementById('el-date').textContent = new Date().toLocaleDateString('es-AR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
