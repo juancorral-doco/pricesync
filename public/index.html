@@ -512,7 +512,7 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
 
 // ── Configuración ──────────────────────────────────────────────────────────────
 const ML_USER_ID   = '122478';
-const ML_TOKEN_DEF = 'APP_USR-6254347522292621-042608-f3c1cab1e65ae74a0cad6d86553539ca-122478';
+const ML_TOKEN_DEF = 'APP_USR-6254347522292621-042908-fcb55f74aa479435d5cf1f539da371ce-122478';
 // URL del proxy Netlify — se auto-detecta si estamos en Netlify o en local
 const PROXY_BASE   = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:8888/.netlify/functions/ml-proxy'
@@ -854,10 +854,29 @@ async function syncAll() {
           var rp = await mlFetchRaw('/items/' + item.id + '/prices');
           if (!rp.ok) return;
           var dp = await rp.json();
-          (dp.prices || []).forEach(function(p) {
-            if (p.regular_amount != null && p.amount && (!promoMap[item.id] || p.amount < promoMap[item.id]))
-              promoMap[item.id] = p.amount;
+          var prices = dp.prices || [];
+          // 1. Buscar precio de tipo "promotion" para channel_marketplace (prioridad máxima)
+          var promoPrice = null;
+          prices.forEach(function(p) {
+            var isMarket = !p.conditions || !p.conditions.context_restrictions ||
+              p.conditions.context_restrictions.length === 0 ||
+              p.conditions.context_restrictions.indexOf('channel_marketplace') >= 0;
+            if (p.type === 'promotion' && p.amount && isMarket) {
+              if (promoPrice === null || p.amount < promoPrice) promoPrice = p.amount;
+            }
           });
+          // 2. Fallback: precio standard con regular_amount != null (promo detectada por otro campo)
+          if (promoPrice === null) {
+            prices.forEach(function(p) {
+              var isMarket = !p.conditions || !p.conditions.context_restrictions ||
+                p.conditions.context_restrictions.length === 0 ||
+                p.conditions.context_restrictions.indexOf('channel_marketplace') >= 0;
+              if (p.regular_amount != null && p.amount && isMarket) {
+                if (promoPrice === null || p.amount < promoPrice) promoPrice = p.amount;
+              }
+            });
+          }
+          if (promoPrice !== null) promoMap[item.id] = promoPrice;
         } catch(e) {}
       }));
     }
