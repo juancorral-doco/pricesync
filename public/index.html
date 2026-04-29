@@ -844,47 +844,81 @@ async function syncAll() {
       d2.forEach(function(x) { if (x.body) raw.push(x.body); });
     }
 
-    // Paso 3: Precios promocionales en lotes de 10
+    // Paso 3: Precios promocionales — lotes de 10 con reintento ante errores 500
     var promoMap = {};
+
+    // Función que extrae precio promo de una lista de precios ML
+    function extractPromo(prices, itemPrice) {
+      var promoPrice = null;
+      // Prioridad 1: type === "promotion" para channel_marketplace
+      (prices || []).forEach(function(p) {
+        var isMarket = !p.conditions || !p.conditions.context_restrictions ||
+          p.conditions.context_restrictions.length === 0 ||
+          p.conditions.context_restrictions.indexOf('channel_marketplace') >= 0;
+        if (p.type === 'promotion' && p.amount && isMarket) {
+          if (promoPrice === null || p.amount < promoPrice) promoPrice = p.amount;
+        }
+      });
+      // Prioridad 2: type === "standard" con regular_amount != null para channel_marketplace
+      if (promoPrice === null) {
+        (prices || []).forEach(function(p) {
+          var isMarket = !p.conditions || !p.conditions.context_restrictions ||
+            p.conditions.context_restrictions.length === 0 ||
+            p.conditions.context_restrictions.indexOf('channel_marketplace') >= 0;
+          if (p.regular_amount != null && p.amount && isMarket && p.amount < itemPrice) {
+            if (promoPrice === null || p.amount < promoPrice) promoPrice = p.amount;
+          }
+        });
+      }
+      return promoPrice;
+    }
+
+    // Función con reintento automático ante error 500
+    async function fetchPricesWithRetry(itemId, maxRetries) {
+      for (var attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          var rp = await mlFetchRaw('/items/' + itemId + '/prices');
+          if (rp.status === 500) {
+            // Error interno de ML — esperar 1 segundo y reintentar
+            await new Promise(function(res) { setTimeout(res, 1000); });
+            continue;
+          }
+          if (!rp.ok) return null;
+          var dp = await rp.json();
+          if (dp.error || (dp.status && dp.status >= 400)) return null;
+          return dp.prices || [];
+        } catch(e) {}
+      }
+      return null;
+    }
+
     for (var pi = 0; pi < raw.length; pi += 10) {
       if (pi % 50 === 0) setStatus('Verificando promos... (' + pi + '/' + raw.length + ')', 'info');
       var batch = raw.slice(pi, pi + 10);
       await Promise.all(batch.map(async function(item) {
-        try {
-          var rp = await mlFetchRaw('/items/' + item.id + '/prices');
-          if (!rp.ok) {
-            console.warn('Error /prices para', item.id, '- HTTP', rp.status);
-            return;
-          }
-          var dp = await rp.json();
-          if (dp.error || dp.status >= 400) {
-            console.warn('Error en respuesta /prices para', item.id, JSON.stringify(dp));
-            return;
-          }
-          var prices = dp.prices || [];
-          // 1. Buscar precio de tipo "promotion" para channel_marketplace (prioridad máxima)
-          var promoPrice = null;
-          prices.forEach(function(p) {
-            var isMarket = !p.conditions || !p.conditions.context_restrictions ||
-              p.conditions.context_restrictions.length === 0 ||
-              p.conditions.context_restrictions.indexOf('channel_marketplace') >= 0;
-            if (p.type === 'promotion' && p.amount && isMarket) {
-              if (promoPrice === null || p.amount < promoPrice) promoPrice = p.amount;
-            }
-          });
-          // 2. Fallback: precio standard con regular_amount != null (promo detectada por otro campo)
-          if (promoPrice === null) {
-            prices.forEach(function(p) {
-              var isMarket = !p.conditions || !p.conditions.context_restrictions ||
-                p.conditions.context_restrictions.length === 0 ||
-                p.conditions.context_restrictions.indexOf('channel_marketplace') >= 0;
-              if (p.regular_amount != null && p.amount && isMarket) {
-                if (promoPrice === null || p.amount < promoPrice) promoPrice = p.amount;
+        // Intentar via /prices (con hasta 3 reintentos ante error 500)
+        var prices = await fetchPricesWithRetry(item.id, 3);
+        var promoPrice = prices ? extractPromo(prices, item.price) : null;
+
+        // Fallback: leer item individual y usar sale_price si /prices falló
+        if (promoPrice === null && prices === null) {
+          try {
+            var ri = await mlFetchRaw('/items/' + item.id);
+            if (ri.ok) {
+              var di = await ri.json();
+              // sale_price a veces está en el item individual aunque no en multiget
+              if (di.sale_price && di.sale_price.amount && di.sale_price.amount < item.price) {
+                promoPrice = di.sale_price.amount;
               }
-            });
-          }
-          if (promoPrice !== null) promoMap[item.id] = promoPrice;
-        } catch(e) {}
+              // También intentar con los prices del item individual
+              if (promoPrice === null && di.prices) {
+                promoPrice = extractPromo(di.prices, item.price);
+              }
+            }
+          } catch(e) {}
+        }
+
+        if (promoPrice !== null) promoMap[item.id] = promoPrice;
       }));
     }
 

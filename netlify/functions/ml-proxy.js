@@ -87,7 +87,8 @@ exports.handler = async function(event) {
     const allowed = [
       /^\/users\/\d+\/items\/search/,
       /^\/items$/,
-      /^\/items\/MLA\d+\/prices/,
+      /^\/items\/MLA[\w]+\/prices/,
+      /^\/items\/MLA[\w]+$/,
       /^\/users\/me$/,
     ];
     const isAllowed = allowed.some(function(re) { return re.test(path); });
