@@ -1477,42 +1477,46 @@ function buildAnalisisData() {
   var p = getCalcParams();
   var rows = [];
 
-  // Combinar ML y TN: iterar sobre mlItems y cruzar con tnItems por SKU/nombre
-  var tnBySkuName = {};
-  tnItems.forEach(function(tn) {
-    var s = (tn.sku || '').toLowerCase().trim();
-    var n = tn.name.toLowerCase().trim();
-    if (s) tnBySkuName[s] = tn;
-    if (n) tnBySkuName[n] = tn;
-  });
+  // Mapa de TN por id para lookup rápido
+  var tnById = {};
+  tnItems.forEach(function(tn) { tnById[tn.id] = tn; });
 
-  // Usar mlItems como base y cruzar con TN
+  // Mapa de costo por nombre normalizado (de preciosData)
+  var costoByNom = {};
+  preciosData.forEach(function(pd) { costoByNom[pd.nom.toLowerCase().trim()] = pd.costo; });
+
+  function findCosto(titulo) {
+    var t = titulo.toLowerCase().trim();
+    // Match exacto
+    if (costoByNom[t]) return costoByNom[t];
+    // Match parcial: el nombre del costo está contenido en el titulo o viceversa
+    var keys = Object.keys(costoByNom);
+    for (var i = 0; i < keys.length; i++) {
+      if (t.includes(keys[i]) || keys[i].includes(t)) return costoByNom[keys[i]];
+    }
+    return null;
+  }
+
   var seen = {};
   mlItems.forEach(function(ml) {
+    var lk = ml.variationId ? ml.id + '_' + ml.variationId : ml.id;
+    if (seen[lk]) return;
+    seen[lk] = true;
+
     var baseTitle = ml.title.split(' — ')[0];
-    var key = ml.id + (ml.variationId ? '_' + ml.variationId : '');
-    if (seen[key]) return;
-    seen[key] = true;
+    // Usar effML() función global — evitar conflicto de nombre con variable local
+    var precioActML = effML(ml); // considera cfg.usePromo y promoPrice
 
-    var effML = (cfg.usePromo && ml.promoPrice) ? ml.promoPrice : ml.price;
+    // Usar links[] ya construido (mismo algoritmo que comparación)
+    var tnId = links[lk];
+    var tn = tnId ? tnById[tnId] : null;
+    var precioActTN = tn ? (tn.promoPrice || tn.price) : null;
 
-    // Buscar en TN
-    var tnKey = (ml.sku || '').toLowerCase().trim() || baseTitle.toLowerCase().trim();
-    var tn = tnBySkuName[tnKey] || null;
-    var effTN = tn ? (tn.promoPrice || tn.price) : null;
+    var costo = findCosto(baseTitle);
 
-    // Buscar costo en preciosData por nombre
-    var nomLow = baseTitle.toLowerCase().trim();
-    var prodCosto = preciosData.find(function(pd) {
-      return pd.nom.toLowerCase().trim() === nomLow ||
-             nomLow.includes(pd.nom.toLowerCase().trim()) ||
-             pd.nom.toLowerCase().trim().includes(nomLow);
-    });
-    var costo = prodCosto ? prodCosto.costo : null;
-
-    var ganMLval = costo ? getGananciaReal(effML, costo, p, 'ml') : null;
+    var ganMLval = costo ? getGananciaReal(precioActML, costo, p, 'ml') : null;
     var ganMLpct = (ganMLval !== null && costo) ? (ganMLval / costo * 100) : null;
-    var ganTNval = (costo && effTN) ? getGananciaReal(effTN, costo, p, 'tn') : null;
+    var ganTNval = (costo && precioActTN) ? getGananciaReal(precioActTN, costo, p, 'tn') : null;
     var ganTNpct = (ganTNval !== null && costo) ? (ganTNval / costo * 100) : null;
 
     rows.push({
@@ -1521,8 +1525,8 @@ function buildAnalisisData() {
       statusML:  ml.status,
       statusTN:  tn ? (tn.visible ? 'visible' : 'oculto') : '—',
       tnVisible: tn ? tn.visible : null,
-      precioML:  effML,
-      precioTN:  effTN,
+      precioML:  precioActML,
+      precioTN:  precioActTN,
       costo:     costo,
       ganML:     ganMLval,
       ganMLpct:  ganMLpct,
@@ -1550,14 +1554,17 @@ function renderAnalisis() {
   var data = buildAnalisisData();
 
   var filtered = data.filter(function(r) {
+    // Filtro texto
     if (q && !r.title.toLowerCase().includes(q)) return false;
-    if (statusF === 'ml-active')  return r.statusML === 'active';
-    if (statusF === 'tn-visible') return r.tnVisible === true;
-    if (statusF === 'both')       return r.statusML === 'active' && r.tnVisible === true;
-    if (ganF === 'positive') return r.ganMLpct !== null && r.ganMLpct > 0;
-    if (ganF === 'negative') return r.ganMLpct !== null && r.ganMLpct <= 0;
-    if (ganF === 'gt20')     return r.ganMLpct !== null && r.ganMLpct > 20;
-    if (ganF === 'lt10')     return r.ganMLpct !== null && r.ganMLpct < 10;
+    // Filtro estado — independiente del filtro ganancia
+    if (statusF === 'ml-active'  && r.statusML !== 'active')                  return false;
+    if (statusF === 'tn-visible' && r.tnVisible !== true)                      return false;
+    if (statusF === 'both'       && !(r.statusML === 'active' && r.tnVisible)) return false;
+    // Filtro ganancia — independiente del filtro estado
+    if (ganF === 'positive' && !(r.ganMLpct !== null && r.ganMLpct > 0))   return false;
+    if (ganF === 'negative' && !(r.ganMLpct !== null && r.ganMLpct <= 0))  return false;
+    if (ganF === 'gt20'     && !(r.ganMLpct !== null && r.ganMLpct > 20))  return false;
+    if (ganF === 'lt10'     && !(r.ganMLpct !== null && r.ganMLpct < 10))  return false;
     return true;
   });
 
