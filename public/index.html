@@ -852,8 +852,15 @@ async function syncAll() {
       await Promise.all(batch.map(async function(item) {
         try {
           var rp = await mlFetchRaw('/items/' + item.id + '/prices');
-          if (!rp.ok) return;
+          if (!rp.ok) {
+            console.warn('Error /prices para', item.id, '- HTTP', rp.status);
+            return;
+          }
           var dp = await rp.json();
+          if (dp.error || dp.status >= 400) {
+            console.warn('Error en respuesta /prices para', item.id, JSON.stringify(dp));
+            return;
+          }
           var prices = dp.prices || [];
           // 1. Buscar precio de tipo "promotion" para channel_marketplace (prioridad máxima)
           var promoPrice = null;
