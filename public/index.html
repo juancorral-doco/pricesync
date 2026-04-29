@@ -1497,23 +1497,35 @@ function buildAnalisisData() {
     return null;
   }
 
-  var seen = {};
+  // Agrupar por item padre (ml.id) — un item con variantes = una sola fila
+  // usando el precio del primer precio encontrado y el link del padre
+  var seenId = {};
   mlItems.forEach(function(ml) {
-    var lk = ml.variationId ? ml.id + '_' + ml.variationId : ml.id;
-    if (seen[lk]) return;
-    seen[lk] = true;
+    // Para items con variantes, agrupar todas bajo el id padre
+    var groupKey = ml.id; // siempre usar id padre como clave de agrupación
+    if (seenId[groupKey]) return;
+    seenId[groupKey] = true;
 
     var baseTitle = ml.title.split(' — ')[0];
-    // Usar effML() función global — evitar conflicto de nombre con variable local
-    var precioActML = effML(ml); // considera cfg.usePromo y promoPrice
 
-    // Usar links[] ya construido (mismo algoritmo que comparación)
-    var tnId = links[lk];
-    var tn = tnId ? tnById[tnId] : null;
+    // Precio efectivo ML: para items con variantes usar el precio del item padre
+    // promoPrice viene del item padre (mismo para todas las variantes)
+    var precioActML = effML(ml);
+
+    // Buscar link: primero con variationId (clave exacta), fallback al id padre
+    var lk     = ml.variationId ? ml.id + '_' + ml.variationId : ml.id;
+    var tnId   = links[lk];
+    // Fallback: buscar cualquier variante del mismo item que tenga link
+    if (!tnId && ml.variationId) {
+      var allKeys = Object.keys(links);
+      for (var ki = 0; ki < allKeys.length; ki++) {
+        if (allKeys[ki].indexOf(ml.id) === 0) { tnId = links[allKeys[ki]]; break; }
+      }
+    }
+    var tn         = tnId ? tnById[tnId] : null;
     var precioActTN = tn ? (tn.promoPrice || tn.price) : null;
 
-    var costo = findCosto(baseTitle);
-
+    var costo    = findCosto(baseTitle);
     var ganMLval = costo ? getGananciaReal(precioActML, costo, p, 'ml') : null;
     var ganMLpct = (ganMLval !== null && costo) ? (ganMLval / costo * 100) : null;
     var ganTNval = (costo && precioActTN) ? getGananciaReal(precioActTN, costo, p, 'tn') : null;
@@ -1521,7 +1533,7 @@ function buildAnalisisData() {
 
     rows.push({
       title:     baseTitle,
-      variante:  ml.variationId ? ml.title.replace(baseTitle, '').replace(' — ', '') : '',
+      variante:  ml.hasVariations ? '(con variantes)' : '',
       statusML:  ml.status,
       statusTN:  tn ? (tn.visible ? 'visible' : 'oculto') : '—',
       tnVisible: tn ? tn.visible : null,
