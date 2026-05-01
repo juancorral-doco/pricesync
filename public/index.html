@@ -502,6 +502,43 @@ tbody td{padding:11px 13px;font-size:13px;vertical-align:middle;}
           Los que no coinciden aparecen como <span class="badge b-none">Sin vincular</span>.
         </p>
       </div>
+
+      <div class="cfg-group">
+        <h3>🔄 Generar Actualización de Precios TN</h3>
+        <div class="alert a-info" id="el-gentn-alert">
+          Genera un CSV listo para importar en Tienda Nube con los precios actualizados desde ML.<br>
+          <span style="font-size:12px;">
+            • <strong>Precio TN</strong> = Precio ML sin promoción − 6%<br>
+            • <strong>Precio promocional TN</strong> = Precio ML con promoción (si tiene) − 6%, sino Precio ML − 6%
+          </span>
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.7;">
+            <strong>Paso 1:</strong> Subí el CSV base de TN (el mismo que exportás desde tu panel)<br>
+            <strong>Paso 2:</strong> Hacé clic en "Generar CSV actualizado"<br>
+            <strong>Paso 3:</strong> Importá el archivo generado en Tienda Nube
+          </div>
+
+          <div class="drop-zone" id="el-gentn-drop"
+            onclick="document.getElementById('el-gentn-input').click()"
+            ondragover="event.preventDefault();this.style.borderColor='var(--amber)'"
+            ondragleave="this.style.borderColor=''"
+            ondrop="onGenTNDrop(event)">
+            <div style="font-size:24px;margin-bottom:6px;">📥</div>
+            <div style="font-weight:500;" id="el-gentn-label">Arrastrá el CSV base de TN o hacé clic para seleccionar</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">El mismo CSV que exportás desde Productos → Exportar en TN</div>
+            <input type="file" id="el-gentn-input" accept=".csv" style="display:none" onchange="onGenTNSelect(event)">
+          </div>
+          <div id="el-gentn-preview" style="margin-top:10px;"></div>
+          <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <button class="sync-btn" id="el-gentn-btn" onclick="generarCSVTN()" disabled style="opacity:.4;">
+              ↓ Generar CSV actualizado
+            </button>
+            <span style="font-size:12px;color:var(--muted);" id="el-gentn-stats"></span>
+          </div>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -1710,6 +1747,154 @@ function exportAnalisis() {
   var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = 'analisis_ganancia_' + new Date().toISOString().slice(0,10) + '.csv';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ── Generador de CSV para actualización de precios TN ────────────────────────
+var genTNBaseRows = [];   // filas del CSV base de TN
+var genTNHeader   = [];   // header del CSV base
+
+function onGenTNDrop(ev) {
+  ev.preventDefault();
+  var dz = document.getElementById('el-gentn-drop');
+  if (dz) dz.style.borderColor = '';
+  var f = ev.dataTransfer && ev.dataTransfer.files[0];
+  if (f) loadGenTNBase(f);
+}
+
+function onGenTNSelect(ev) {
+  var f = ev.target && ev.target.files[0];
+  if (f) loadGenTNBase(f);
+}
+
+function loadGenTNBase(file) {
+  var lbl  = document.getElementById('el-gentn-label');
+  var prev = document.getElementById('el-gentn-preview');
+  var btn  = document.getElementById('el-gentn-btn');
+  var alrt = document.getElementById('el-gentn-alert');
+  if (prev) prev.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:6px 0;">⏳ Leyendo ' + file.name + '...</div>';
+
+  var reader = new FileReader();
+  reader.onload = function(ev2) {
+    try {
+      var decoder = new TextDecoder('windows-1252');
+      var text = decoder.decode(ev2.target.result);
+      var rows = parseCSV(text);
+      if (rows.length < 2) {
+        if (prev) prev.innerHTML = '<div class="alert a-warn">⚠ CSV vacío o inválido.</div>';
+        return;
+      }
+      genTNHeader = rows[0];
+      genTNBaseRows = rows.slice(1).filter(function(r) { return r.some(function(c) { return c.trim(); }); });
+
+      // Detectar índices de columnas clave
+      var hLow = genTNHeader.map(function(h) { return h.trim().toLowerCase(); });
+      var iSKU    = hLow.indexOf('sku');
+      var iPrecio = hLow.indexOf('precio');
+      var iPromo  = hLow.indexOf('precio promocional');
+      var iNombre = hLow.indexOf('nombre');
+
+      if (iSKU < 0 || iPrecio < 0) {
+        if (prev) prev.innerHTML = '<div class="alert a-warn">⚠ No se encontraron las columnas SKU y Precio.</div>';
+        return;
+      }
+
+      // Preview: mostrar cuántos productos se van a actualizar
+      var conML = 0, sinML = 0;
+      genTNBaseRows.forEach(function(r) {
+        var sku = (r[iSKU] || '').trim().toLowerCase();
+        var matchML = mlItems.find(function(ml) { return (ml.sku || '').toLowerCase().trim() === sku; });
+        if (matchML) conML++; else sinML++;
+      });
+
+      if (lbl)  lbl.textContent  = '✓ ' + file.name + ' cargado (' + genTNBaseRows.length + ' productos)';
+      if (prev) prev.innerHTML   =
+        '<div class="alert a-ok" style="margin-top:4px;">' +
+        '✓ <strong>' + genTNBaseRows.length + ' productos</strong> en el CSV base<br>' +
+        '<span style="color:var(--green);">● ' + conML + ' con precio ML disponible</span><br>' +
+        '<span style="color:var(--muted);">○ ' + sinML + ' sin match en ML (se mantiene precio actual)</span>' +
+        '</div>';
+      if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+      var stats = document.getElementById('el-gentn-stats');
+      if (stats) stats.textContent = conML + ' se actualizan · ' + sinML + ' sin cambio';
+
+    } catch(err) {
+      if (prev) prev.innerHTML = '<div class="alert a-warn">⚠ Error: ' + err.message + '</div>';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function generarCSVTN() {
+  if (!genTNBaseRows.length) { alert('Primero cargá el CSV base de TN.'); return; }
+  if (!mlItems.length) { alert('Primero sincronizá MercadoLibre.'); return; }
+
+  var hLow    = genTNHeader.map(function(h) { return h.trim().toLowerCase(); });
+  var iSKU    = hLow.indexOf('sku');
+  var iPrecio = hLow.indexOf('precio');
+  var iPromo  = hLow.indexOf('precio promocional');
+  var DESCUENTO = 0.06; // 6% de descuento
+
+  // Mapa de ML por SKU para lookup rápido
+  var mlBySku = {};
+  mlItems.forEach(function(ml) {
+    var s = (ml.sku || '').toLowerCase().trim();
+    if (s && !mlBySku[s]) mlBySku[s] = ml;
+  });
+
+  var actualizados = 0, sinMatch = 0;
+
+  var newRows = genTNBaseRows.map(function(row) {
+    var newRow = row.slice(); // copia la fila completa
+    var sku    = (row[iSKU] || '').trim().toLowerCase();
+    var ml     = mlBySku[sku] || null;
+
+    if (ml) {
+      // Precio ML sin promo (precio de lista)
+      var precioBase = ml.price;
+      // Precio ML con promo (si tiene), si no usar precio base
+      var precioConPromo = ml.promoPrice || ml.price;
+
+      // PRECIO TN = precio ML sin promo - 6% (redondeado a entero)
+      var precioTN = Math.round(precioBase * (1 - DESCUENTO));
+      // PRECIO PROMOCIONAL TN = precio ML con promo - 6%
+      var precioPromoTN = Math.round(precioConPromo * (1 - DESCUENTO));
+
+      newRow[iPrecio] = String(precioTN);
+      if (iPromo >= 0) newRow[iPromo] = String(precioPromoTN);
+
+      actualizados++;
+    } else {
+      sinMatch++;
+    }
+    return newRow;
+  });
+
+  // Generar CSV con mismo formato que TN (separador ;, encoding windows-1252 via latin-1)
+  var allRows = [genTNHeader].concat(newRows);
+  var csv = allRows.map(function(row) {
+    return row.map(function(cell) {
+      var s = String(cell || '');
+      // Escapar comillas y campos con punto y coma
+      if (s.includes(';') || s.includes('"') || s.includes('\n')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }).join(';');
+  }).join('\r\n');
+
+  // Descargar
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'actualizacion_precios_TN_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+
+  var alrt = document.getElementById('el-gentn-alert');
+  if (alrt) {
+    alrt.className = 'alert a-ok';
+    alrt.innerHTML = '✓ CSV generado — <strong>' + actualizados + ' productos actualizados</strong>, ' + sinMatch + ' sin match ML.<br>' +
+      '<span style="font-size:12px;">Importalo en TN desde Productos → Importar → seleccionar el archivo descargado.</span>';
+  }
 }
 
 document.getElementById('el-date').textContent = new Date().toLocaleDateString('es-AR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
