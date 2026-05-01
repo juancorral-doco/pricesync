@@ -1849,15 +1849,13 @@ function generarCSVTN() {
     var ml     = mlBySku[sku] || null;
 
     if (ml) {
-      // Precio ML sin promo (precio de lista)
-      var precioBase = ml.price;
-      // Precio ML con promo (si tiene), si no usar precio base
-      var precioConPromo = ml.promoPrice || ml.price;
+      // Precio efectivo: si tiene promo usar promoPrice, sino price
+      var precioEfectivo = ml.promoPrice || ml.price;
 
-      // PRECIO TN = precio ML sin promo - 6% (redondeado a entero)
-      var precioTN = Math.round(precioBase * (1 - DESCUENTO));
-      // PRECIO PROMOCIONAL TN = precio ML con promo - 6%
-      var precioPromoTN = Math.round(precioConPromo * (1 - DESCUENTO));
+      // PRECIO TN = precio efectivo de ML (con o sin promo)
+      var precioTN = Math.round(precioEfectivo);
+      // PRECIO PROMOCIONAL TN = precio efectivo - 6%
+      var precioPromoTN = Math.round(precioEfectivo * (1 - DESCUENTO));
 
       newRow[iPrecio] = String(precioTN);
       if (iPromo >= 0) newRow[iPromo] = String(precioPromoTN);
